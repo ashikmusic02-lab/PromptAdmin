@@ -26,8 +26,8 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun mainActivity_rendersDashboardOnLaunch() {
+    fun mainActivity_rendersGoogleSignInGateWhenUnauthenticated() {
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("dashboard_sync_firestore_button").assertExists()
+        composeTestRule.onNodeWithTag("google_sign_in_button").assertExists()
     }
 }

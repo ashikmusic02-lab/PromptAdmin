@@ -21,6 +21,9 @@ import com.example.model.PromptCategoryEntity
 import com.example.model.PromptImageEntity
 import com.example.util.UrlAndDeepLinkValidator
 import com.example.util.UrlValidationResult
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.UUID
 
 data class AdminSession(
@@ -36,7 +40,7 @@ data class AdminSession(
     val email: String = "",
     val displayName: String = "",
     val role: AdminRole = AdminRole.OWNER,
-    val authMethod: String = "RBAC Session"
+    val authMethod: String = "Google Sign-In"
 )
 
 data class LiveDashboardStats(
@@ -62,26 +66,37 @@ data class LiveDashboardStats(
 
 class AdminViewModel(application: Application) : AndroidViewModel(application) {
 
+    companion object {
+        /**
+         * Administrator Gmail Allowlist.
+         * Only verified Google accounts in this list may enter the administrator control panel.
+         * Add additional emails here in the future as needed.
+         */
+        val ADMIN_EMAIL_ALLOWLIST: List<String> = listOf(
+            "sfforhadvai@gmail.com"
+        )
+
+        fun isAuthorizedAdminEmail(email: String?, isEmailVerified: Boolean): Boolean {
+            if (!isEmailVerified || email.isNullOrBlank()) return false
+            val normalized = email.trim().lowercase(Locale.US)
+            return ADMIN_EMAIL_ALLOWLIST.any { it.trim().lowercase(Locale.US) == normalized }
+        }
+
+        fun isAuthorizedFirebaseUser(user: FirebaseUser?): Boolean {
+            if (user == null) return false
+            val isGoogleProvider = user.providerData.any { it.providerId == "google.com" }
+            return isGoogleProvider && isAuthorizedAdminEmail(user.email, user.isEmailVerified)
+        }
+    }
+
     private val database = AdminDatabase.getInstance(application)
     private val repository = AdminRepository(application, database.adminDao())
 
-    private val _session = MutableStateFlow(
-        AdminSession(
-            isAuthenticated = true,
-            uid = "adm_owner_primary",
-            email = "sfforhadvai@gmail.com",
-            displayName = "Principal System Owner",
-            role = AdminRole.OWNER,
-            authMethod = "Owner Console Session"
-        )
-    )
+    private val _session = MutableStateFlow(AdminSession(isAuthenticated = false))
     val session: StateFlow<AdminSession> = _session.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            repository.ensureInitialConfigBootstrap("sfforhadvai@gmail.com", "adm_owner_primary")
-        }
-    }
+    private val _authErrorMessage = MutableStateFlow<String?>(null)
+    val authErrorMessage: StateFlow<String?> = _authErrorMessage.asStateFlow()
 
     private val _currentSection = MutableStateFlow(AdminSection.DASHBOARD)
     val currentSection: StateFlow<AdminSection> = _currentSection.asStateFlow()
@@ -101,12 +116,49 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
-    // Pre-selected image when jumping to OneSignal Notification composer
     private val _preselectedNotificationImage = MutableStateFlow<PromptImageEntity?>(null)
     val preselectedNotificationImage: StateFlow<PromptImageEntity?> = _preselectedNotificationImage.asStateFlow()
 
     private val _connectionStatus = MutableStateFlow(repository.getConnectionStatus())
     val connectionStatus: StateFlow<FirebaseConnectionStatus> = _connectionStatus.asStateFlow()
+
+    init {
+        checkExistingFirebaseSession(application)
+    }
+
+    private fun checkExistingFirebaseSession(application: Application) {
+        try {
+            if (FirebaseApp.getApps(application).isNotEmpty()) {
+                val auth = FirebaseAuth.getInstance()
+                val currentUser = auth.currentUser
+                if (currentUser != null) {
+                    if (isAuthorizedFirebaseUser(currentUser)) {
+                        val email = currentUser.email.orEmpty()
+                        val uid = currentUser.uid
+                        viewModelScope.launch {
+                            repository.ensureInitialConfigBootstrap(email, uid)
+                            _session.value = AdminSession(
+                                isAuthenticated = true,
+                                uid = uid,
+                                email = email,
+                                displayName = currentUser.displayName?.ifBlank { email.substringBefore("@") }
+                                    ?: email.substringBefore("@"),
+                                role = AdminRole.OWNER,
+                                authMethod = "Firebase Google Sign-In"
+                            )
+                            refreshConnectionStatus()
+                        }
+                    } else {
+                        auth.signOut()
+                        _session.value = AdminSession(isAuthenticated = false)
+                        _authErrorMessage.value = "Access denied"
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            _session.value = AdminSession(isAuthenticated = false)
+        }
+    }
 
     val images: StateFlow<List<PromptImageEntity>> = repository.imagesFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -137,7 +189,6 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     val activityLogs: StateFlow<List<ActivityLogEntity>> = repository.activityLogsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Real-time computed statistics from actual database records (zero fake numbers)
     val liveStats: StateFlow<LiveDashboardStats> = combine(
         images,
         categories,
@@ -179,6 +230,10 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         _connectionStatus.value = repository.getConnectionStatus()
     }
 
+    fun setAuthErrorMessage(message: String?) {
+        _authErrorMessage.value = message
+    }
+
     fun showFeedback(message: String, isError: Boolean = false) {
         _statusBannerMessage.value = message
         _isErrorBanner.value = isError
@@ -188,46 +243,46 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         _statusBannerMessage.value = null
     }
 
-    fun signInAdmin(
-        uid: String,
-        email: String,
-        displayName: String,
-        role: AdminRole,
-        authMethod: String
-    ) {
+    /**
+     * Completes login ONLY if the Google-authenticated FirebaseUser passes the strict email allowlist
+     * and email verification check. Otherwise signs out immediately and shows "Access denied".
+     */
+    fun onGoogleFirebaseUserAuthenticated(user: FirebaseUser?) {
         viewModelScope.launch {
-            val cleanEmail = email.trim().ifEmpty { "admin@promptvault.app" }
-            val cleanUid = uid.trim().ifEmpty { "adm_${cleanEmail.hashCode().toUInt()}" }
-            repository.ensureInitialConfigBootstrap(cleanEmail, cleanUid)
-
-            // Match existing admin account role if registered
-            val existingAdmin = adminAccounts.value.firstOrNull {
-                it.email.equals(cleanEmail, ignoreCase = true) || it.uid == cleanUid
-            }
-            if (existingAdmin != null && !existingAdmin.active) {
-                showFeedback("Access Denied: Administrator account ${existingAdmin.email} is currently deactivated.", isError = true)
+            if (!isAuthorizedFirebaseUser(user)) {
+                try {
+                    FirebaseAuth.getInstance().signOut()
+                } catch (_: Exception) {
+                }
+                _session.value = AdminSession(isAuthenticated = false)
+                _authErrorMessage.value = "Access denied"
                 return@launch
             }
-            val effectiveRole = existingAdmin?.let {
-                runCatching { AdminRole.valueOf(it.role) }.getOrNull()
-            } ?: role
+
+            val verifiedUser = user!!
+            val cleanEmail = verifiedUser.email!!.trim()
+            val cleanUid = verifiedUser.uid
+            _authErrorMessage.value = null
+
+            repository.ensureInitialConfigBootstrap(cleanEmail, cleanUid)
 
             _session.value = AdminSession(
                 isAuthenticated = true,
                 uid = cleanUid,
                 email = cleanEmail,
-                displayName = displayName.ifBlank { cleanEmail.substringBefore("@") },
-                role = effectiveRole,
-                authMethod = authMethod
+                displayName = verifiedUser.displayName?.ifBlank { cleanEmail.substringBefore("@") }
+                    ?: cleanEmail.substringBefore("@"),
+                role = AdminRole.OWNER,
+                authMethod = "Firebase Google Sign-In"
             )
             refreshConnectionStatus()
             repository.recordAuditLog(
                 adminUid = cleanUid,
                 adminEmail = cleanEmail,
-                adminRole = effectiveRole.name,
-                actionType = "ADMIN_SESSION_START",
+                adminRole = AdminRole.OWNER.name,
+                actionType = "ADMIN_GOOGLE_LOGIN",
                 targetEntity = "adminUsers/$cleanUid",
-                summary = "Authenticated administrator session via $authMethod as ${effectiveRole.displayName}"
+                summary = "Authenticated allowlisted Google Owner session ($cleanEmail)"
             )
         }
     }
@@ -251,6 +306,12 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                     targetEntity = "adminUsers/${cur.uid}",
                     summary = "Signed out administrator ${cur.email}"
                 )
+            }
+            try {
+                if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
+                    FirebaseAuth.getInstance().signOut()
+                }
+            } catch (_: Exception) {
             }
             _session.value = AdminSession(isAuthenticated = false)
         }
@@ -363,7 +424,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                 isNew = isNew
             )
             result.onSuccess {
-                showFeedback("${if (isNew) "Created" else "Updated"} '${record.title}' • Deep Link: ${record.deepLink}")
+                showFeedback("${if (isNew) "Created" else "Updated"} '${record.title}' • Prompt isolated in imagePrompts/${record.id}")
                 onSuccess()
             }.onFailure { err ->
                 showFeedback("Failed to save image: ${err.localizedMessage}", isError = true)
@@ -549,7 +610,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // =========================================================================
-    // MODULE 7: COMMENT MODERATION
+    // MODULE 7: COMMENT MODERATION (CREATES FORCE moderationStatus == 'PENDING')
     // =========================================================================
     fun moderateComment(
         comment: CommentEntity,
@@ -596,26 +657,25 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         val cur = _session.value
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            val preMod = appContentSettings.value.requireCommentPreModeration
+            // Forced to PENDING on creation to match firestore.rules
             val comment = CommentEntity(
                 id = "cmt_${UUID.randomUUID().toString().take(8)}",
                 imageId = image.id,
                 imageTitle = image.title,
-                userId = "usr_${username.lowercase().hashCode().toUInt()}",
+                userId = cur.uid,
                 username = username.trim(),
                 content = content.trim(),
-                moderationStatus = if (preMod) "PENDING" else "APPROVED",
+                moderationStatus = "PENDING",
                 reported = reported,
                 reportReason = reportReason.trim(),
                 moderatedByEmail = cur.email,
                 createdAtMillis = now,
                 updatedAtMillis = now
             )
-            repository.updateCommentModeration(comment, cur.uid, cur.email, cur.role.name, "Created comment record")
-            // Also increment comment count on image
+            repository.updateCommentModeration(comment, cur.uid, cur.email, cur.role.name, "Created PENDING comment record")
             val updatedImage = image.copy(commentsCount = image.commentsCount + 1, updatedAtMillis = now)
             repository.saveImage(updatedImage, cur.uid, cur.email, cur.role.name, isNew = false)
-            showFeedback("Recorded comment on '${image.title}'")
+            showFeedback("Recorded comment on '${image.title}' (Status: PENDING)")
         }
     }
 

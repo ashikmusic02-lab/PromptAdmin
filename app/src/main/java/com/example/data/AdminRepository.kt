@@ -2,6 +2,7 @@ package com.example.data
 
 import android.content.Context
 import android.util.Log
+import com.example.BuildConfig
 import com.example.model.ActivityLogEntity
 import com.example.model.AdMobSettingsEntity
 import com.example.model.AdminAccountEntity
@@ -12,6 +13,7 @@ import com.example.model.CommentEntity
 import com.example.model.NotificationEntity
 import com.example.model.PromptCategoryEntity
 import com.example.model.PromptImageEntity
+import com.example.model.ProtectedImagePromptDoc
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -61,7 +63,7 @@ class AdminRepository(
             val apps = FirebaseApp.getApps(context)
             if (apps.isNotEmpty()) {
                 val app = FirebaseApp.getInstance()
-                val projectId = app.options.projectId ?: "configured-firebase-project"
+                val projectId = app.options.projectId ?: BuildConfig.FIREBASE_PROJECT_ID
                 val isPlaceholder = projectId == "remixed-project-id" || projectId.isBlank()
                 val currentUser = try {
                     FirebaseAuth.getInstance().currentUser
@@ -70,10 +72,10 @@ class AdminRepository(
                 }
                 FirebaseConnectionStatus(
                     isGoogleServicesPresent = !isPlaceholder,
-                    projectId = if (isPlaceholder) "Awaiting google-services.json" else projectId,
+                    projectId = if (isPlaceholder) BuildConfig.FIREBASE_PROJECT_ID else projectId,
                     applicationId = context.packageName,
                     databaseModeLabel = if (isPlaceholder) {
-                        "Local Staging SQLite (Upload app/google-services.json to enable live Cloud Firestore)"
+                        "Awaiting app/google-services.json (${BuildConfig.FIREBASE_PROJECT_ID})"
                     } else {
                         "Live Cloud Firestore Connected ($projectId)"
                     },
@@ -82,18 +84,18 @@ class AdminRepository(
             } else {
                 FirebaseConnectionStatus(
                     isGoogleServicesPresent = false,
-                    projectId = "Awaiting google-services.json",
+                    projectId = BuildConfig.FIREBASE_PROJECT_ID,
                     applicationId = context.packageName,
-                    databaseModeLabel = "Local Staging SQLite (Upload app/google-services.json to enable live Cloud Firestore)",
+                    databaseModeLabel = "Awaiting app/google-services.json (Project: ${BuildConfig.FIREBASE_PROJECT_ID})",
                     authEmail = null
                 )
             }
         } catch (e: Exception) {
             FirebaseConnectionStatus(
                 isGoogleServicesPresent = false,
-                projectId = "Awaiting google-services.json",
+                projectId = BuildConfig.FIREBASE_PROJECT_ID,
                 applicationId = context.packageName,
-                databaseModeLabel = "Local Staging SQLite (Awaiting app/google-services.json)",
+                databaseModeLabel = "Awaiting app/google-services.json (Project: ${BuildConfig.FIREBASE_PROJECT_ID})",
                 authEmail = null
             )
         }
@@ -116,6 +118,50 @@ class AdminRepository(
         }
     }
 
+    /**
+     * Converts a PromptImageEntity into a public Firestore map WITHOUT the "prompt" field
+     * so normal users cannot read prompts from /images/{imageId}.
+     */
+    private fun toPublicImageFirestoreMap(image: PromptImageEntity): Map<String, Any> {
+        return mapOf(
+            "id" to image.id,
+            "imageUrl" to image.imageUrl,
+            "shortName" to image.shortName,
+            "title" to image.title,
+            "description" to image.description,
+            "categoryId" to image.categoryId,
+            "categoryName" to image.categoryName,
+            "featured" to image.featured,
+            "trending" to image.trending,
+            "status" to image.status,
+            "displayOrder" to image.displayOrder,
+            "deepLink" to image.deepLink,
+            "verifiedAppLink" to image.verifiedAppLink,
+            "viewsCount" to image.viewsCount,
+            "uniqueViewsCount" to image.uniqueViewsCount,
+            "likesCount" to image.likesCount,
+            "commentsCount" to image.commentsCount,
+            "promptUnlocksCount" to image.promptUnlocksCount,
+            "sharesCount" to image.sharesCount,
+            "createdByUid" to image.createdByUid,
+            "createdAtMillis" to image.createdAtMillis,
+            "updatedAtMillis" to image.updatedAtMillis
+        )
+    }
+
+    /**
+     * Builds the protected prompt payload stored in /imagePrompts/{imageId},
+     * readable only by staff or users with a /promptUnlocks/{uid}_{imageId} record.
+     */
+    private fun toProtectedPromptFirestoreMap(image: PromptImageEntity, adminUid: String): Map<String, Any> {
+        return mapOf(
+            "imageId" to image.id,
+            "prompt" to image.prompt,
+            "updatedByUid" to adminUid,
+            "updatedAtMillis" to image.updatedAtMillis
+        )
+    }
+
     suspend fun ensureInitialConfigBootstrap(currentAdminEmail: String, currentAdminUid: String) {
         if (dao.getAdMobSettingsOnce() == null) {
             dao.upsertAdMobSettings(AdMobSettingsEntity(updatedByEmail = currentAdminEmail))
@@ -132,7 +178,7 @@ class AdminRepository(
                     displayName = "Primary System Owner",
                     role = AdminRole.OWNER.name,
                     active = true,
-                    permissionsSummary = "Full Owner Authority • All 14 Modules"
+                    permissionsSummary = "Full Owner Authority • Google Allowlist Verified"
                 )
             )
         }
@@ -146,9 +192,15 @@ class AdminRepository(
         targetEntity: String,
         summary: String
     ) {
+        val currentFirebaseUid = try {
+            FirebaseAuth.getInstance().currentUser?.uid
+        } catch (_: Exception) {
+            null
+        }
+        val resolvedActorUid = currentFirebaseUid?.takeIf { it.isNotBlank() } ?: adminUid
         val log = ActivityLogEntity(
             id = "log_${UUID.randomUUID().toString().take(8)}",
-            adminUid = adminUid,
+            actorUid = resolvedActorUid,
             adminEmail = adminEmail,
             adminRole = adminRole,
             actionType = actionType,
@@ -159,7 +211,9 @@ class AdminRepository(
         dao.insertActivityLog(log)
         getFirestoreOrNull()?.let { db ->
             try {
-                db.collection("adminActivityLogs").document(log.id).set(log).await()
+                if (!currentFirebaseUid.isNullOrBlank()) {
+                    db.collection("adminActivityLogs").document(log.id).set(log).await()
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -169,7 +223,7 @@ class AdminRepository(
     }
 
     // =========================================================================
-    // IMAGE MANAGEMENT (STRICT URL-ONLY)
+    // IMAGE MANAGEMENT (STRICT URL-ONLY + SEPARATED PROTECTED PROMPT DOC)
     // =========================================================================
     suspend fun saveImage(
         image: PromptImageEntity,
@@ -181,7 +235,16 @@ class AdminRepository(
         return try {
             dao.upsertImage(image)
             getFirestoreOrNull()?.let { db ->
-                db.collection("images").document(image.id).set(image, SetOptions.merge()).await()
+                // 1. Write public metadata WITHOUT "prompt" to /images/{imageId}
+                db.collection("images")
+                    .document(image.id)
+                    .set(toPublicImageFirestoreMap(image))
+                    .await()
+                // 2. Write protected prompt to /imagePrompts/{imageId}
+                db.collection("imagePrompts")
+                    .document(image.id)
+                    .set(toProtectedPromptFirestoreMap(image, adminUid), SetOptions.merge())
+                    .await()
             }
             recordAuditLog(
                 adminUid = adminUid,
@@ -189,7 +252,7 @@ class AdminRepository(
                 adminRole = adminRole,
                 actionType = if (isNew) "IMAGE_CREATED" else "IMAGE_UPDATED",
                 targetEntity = "images/${image.id}",
-                summary = "${if (isNew) "Added" else "Updated"} image '${image.title}' (${image.status}) -> ${image.deepLink}"
+                summary = "${if (isNew) "Added" else "Updated"} image '${image.title}' (${image.status}) + protected prompt in imagePrompts/${image.id}"
             )
             Result.success(image)
         } catch (e: CancellationException) {
@@ -209,6 +272,7 @@ class AdminRepository(
             dao.deleteImageById(image.id)
             getFirestoreOrNull()?.let { db ->
                 db.collection("images").document(image.id).delete().await()
+                db.collection("imagePrompts").document(image.id).delete().await()
             }
             recordAuditLog(
                 adminUid = adminUid,
@@ -216,7 +280,7 @@ class AdminRepository(
                 adminRole = adminRole,
                 actionType = "IMAGE_DELETED",
                 targetEntity = "images/${image.id}",
-                summary = "Deleted image '${image.title}' (${image.shortName})"
+                summary = "Deleted image '${image.title}' and protected prompt imagePrompts/${image.id}"
             )
             Result.success(Unit)
         } catch (e: CancellationException) {
@@ -318,7 +382,6 @@ class AdminRepository(
             getFirestoreOrNull()?.let { db ->
                 db.collection("users").document(user.id).set(user, SetOptions.merge()).await()
             }
-            // If an Admin Auth Cloud Function URL is configured, invoke it for server-side Firebase Auth state sync
             val appConfig = dao.getAppContentSettingsOnce()
             val authFnUrl = appConfig?.adminAuthFunctionUrl?.trim().orEmpty()
             if (authFnUrl.startsWith("https://")) {
@@ -559,8 +622,6 @@ class AdminRepository(
                     )
                 }
             } else {
-                // Provider response is not available until Cloud Function URL + OneSignal App ID are configured.
-                // Never fabricate a "Delivered" status without provider confirmation.
                 val statusWhenUnconfigured = if (notification.scheduleType == "SCHEDULE_LATER") {
                     "SCHEDULED"
                 } else {
@@ -650,7 +711,7 @@ class AdminRepository(
     }
 
     // =========================================================================
-    // TWO-WAY FIRESTORE BATCH SYNC (WHEN google-services.json IS UPLOADED)
+    // TWO-WAY FIRESTORE BATCH SYNC (SEPARATED /images AND /imagePrompts)
     // =========================================================================
     suspend fun syncAllWithFirestore(
         adminUid: String,
@@ -658,17 +719,25 @@ class AdminRepository(
         adminRole: String
     ): Result<String> {
         val db = getFirestoreOrNull()
-            ?: return Result.failure(IllegalStateException("app/google-services.json is not yet uploaded. Place your google-services.json inside the app/ folder and rebuild to connect to live Cloud Firestore."))
+            ?: return Result.failure(
+                IllegalStateException("app/google-services.json is not yet loaded. Ensure app/google-services.json is present for package com.farhadvarietiesstore.promptlensadmin.")
+            )
 
         return try {
-            // 1. Push local records to Firestore
+            // 1. Push local records to Firestore (separating public /images and protected /imagePrompts)
             val localCategories = dao.getAllCategoriesOnce()
             for (cat in localCategories) {
                 db.collection("categories").document(cat.id).set(cat, SetOptions.merge()).await()
             }
             val localImages = dao.getAllImagesOnce()
             for (img in localImages) {
-                db.collection("images").document(img.id).set(img, SetOptions.merge()).await()
+                db.collection("images").document(img.id).set(toPublicImageFirestoreMap(img)).await()
+                if (img.prompt.isNotBlank()) {
+                    db.collection("imagePrompts")
+                        .document(img.id)
+                        .set(toProtectedPromptFirestoreMap(img, adminUid), SetOptions.merge())
+                        .await()
+                }
             }
             dao.getAdMobSettingsOnce()?.let { admob ->
                 db.collection("advertisementSettings").document(admob.id).set(admob, SetOptions.merge()).await()
@@ -677,14 +746,24 @@ class AdminRepository(
                 db.collection("appSettings").document(content.id).set(content, SetOptions.merge()).await()
             }
 
-            // 2. Pull remote collections from Firestore (paginated / bounded for free-tier safety)
+            // 2. Pull remote collections from Firestore and merge protected prompts from /imagePrompts
             val remoteCategories = db.collection("categories").limit(100).get().await()
                 .toObjects(PromptCategoryEntity::class.java)
             if (remoteCategories.isNotEmpty()) dao.upsertCategories(remoteCategories)
 
             val remoteImages = db.collection("images").limit(200).get().await()
                 .toObjects(PromptImageEntity::class.java)
-            if (remoteImages.isNotEmpty()) dao.upsertImages(remoteImages)
+            val remotePromptDocs = db.collection("imagePrompts").limit(200).get().await()
+                .toObjects(ProtectedImagePromptDoc::class.java)
+                .associateBy { it.imageId }
+
+            if (remoteImages.isNotEmpty()) {
+                val mergedImages = remoteImages.map { img ->
+                    val secretPrompt = remotePromptDocs[img.id]?.prompt ?: img.prompt
+                    img.copy(prompt = secretPrompt)
+                }
+                dao.upsertImages(mergedImages)
+            }
 
             val remoteUsers = db.collection("users").limit(200).get().await()
                 .toObjects(AppUserEntity::class.java)
@@ -702,7 +781,7 @@ class AdminRepository(
                 .toObjects(AdminAccountEntity::class.java)
             if (remoteAdmins.isNotEmpty()) dao.upsertAdminAccounts(remoteAdmins)
 
-            val msg = "Synchronized ${localImages.size + remoteImages.size} images, ${localCategories.size + remoteCategories.size} categories, ${remoteUsers.size} users, and ${remoteComments.size} comments with Firestore."
+            val msg = "Synchronized ${localImages.size + remoteImages.size} images (+ separate imagePrompts), ${localCategories.size + remoteCategories.size} categories, ${remoteUsers.size} users, and ${remoteComments.size} comments with Firestore."
             recordAuditLog(
                 adminUid = adminUid,
                 adminEmail = adminEmail,

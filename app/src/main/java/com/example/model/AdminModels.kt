@@ -116,6 +116,14 @@ data class PromptImageEntity(
 )
 
 @Keep
+data class ProtectedImagePromptDoc(
+    val imageId: String = "",
+    val prompt: String = "",
+    val updatedByUid: String = "",
+    val updatedAtMillis: Long = System.currentTimeMillis()
+)
+
+@Keep
 @Entity(tableName = "categories")
 data class PromptCategoryEntity(
     @PrimaryKey val id: String = "",
@@ -153,7 +161,7 @@ data class CommentEntity(
     val userId: String = "",
     val username: String = "",
     val content: String = "",
-    val moderationStatus: String = "APPROVED", // APPROVED, PENDING, HIDDEN, DELETED
+    val moderationStatus: String = "PENDING", // APPROVED, PENDING, HIDDEN, DELETED
     val reported: Boolean = false,
     val reportReason: String = "",
     val adminReply: String = "",
@@ -178,9 +186,9 @@ data class AdMobSettingsEntity(
     val interstitialAdsEnabled: Boolean = true,
     val interstitialFrequencyActions: Int = 4,
     val minInterstitialIntervalSeconds: Int = 90,
-    val placementStrategy: String = "BALANCED_UX", // CONSERVATIVE, BALANCED_UX, HIGH_VISIBILITY
-    val rewardPolicy: String = "SINGLE_AD_PER_PROMPT_UNLOCK", // SINGLE_AD_PER_PROMPT_UNLOCK, SESSION_PASS_15M
-    val fallbackBehavior: String = "GRANT_UNLOCK_ON_NO_FILL", // GRANT_UNLOCK_ON_NO_FILL, RETRY_THEN_INTERSTITIAL, STRICT_REQUIRE_AD
+    val placementStrategy: String = "BALANCED_UX",
+    val rewardPolicy: String = "SINGLE_AD_PER_PROMPT_UNLOCK",
+    val fallbackBehavior: String = "GRANT_UNLOCK_ON_NO_FILL",
     val adImpressionsTracked: Long = 0L,
     val rewardedCompletionsTracked: Long = 0L,
     val updatedByEmail: String = "",
@@ -210,7 +218,7 @@ data class AppContentSettingsEntity(
     val oneSignalAppId: String = "",
     val oneSignalFunctionUrl: String = "",
     val adminAuthFunctionUrl: String = "",
-    val requireCommentPreModeration: Boolean = false,
+    val requireCommentPreModeration: Boolean = true,
     val updatedByEmail: String = "",
     val updatedAtMillis: Long = System.currentTimeMillis()
 )
@@ -221,14 +229,14 @@ data class NotificationEntity(
     @PrimaryKey val id: String = "",
     val title: String = "",
     val message: String = "",
-    val targetAudience: String = "ALL_SUBSCRIBED", // ALL_SUBSCRIBED, ACTIVE_USERS, HIGH_ENGAGEMENT, NEW_USERS
+    val targetAudience: String = "ALL_SUBSCRIBED",
     val imageId: String = "",
     val imageTitle: String = "",
     val imageThumbnailUrl: String = "",
     val deepLink: String = "",
-    val scheduleType: String = "SEND_NOW", // SEND_NOW, SCHEDULE_LATER
+    val scheduleType: String = "SEND_NOW",
     val scheduledTimeDisplay: String = "Immediate Dispatch",
-    val sendingStatus: String = "QUEUED_FOR_SERVER", // QUEUED_FOR_SERVER, SCHEDULED, DISPATCHED_PROVIDER_CONFIRMED, FAILED
+    val sendingStatus: String = "QUEUED_FOR_SERVER",
     val deliveryDetails: String = "",
     val createdByEmail: String = "",
     val createdAtMillis: Long = System.currentTimeMillis()
@@ -240,7 +248,7 @@ data class AdminAccountEntity(
     @PrimaryKey val uid: String = "",
     val email: String = "",
     val displayName: String = "",
-    val role: String = AdminRole.OWNER.name, // OWNER, ADMINISTRATOR, MODERATOR
+    val role: String = AdminRole.OWNER.name,
     val active: Boolean = true,
     val permissionsSummary: String = "Full System Access",
     val createdAtMillis: Long = System.currentTimeMillis(),
@@ -251,7 +259,7 @@ data class AdminAccountEntity(
 @Entity(tableName = "admin_activity_logs")
 data class ActivityLogEntity(
     @PrimaryKey val id: String = "",
-    val adminUid: String = "",
+    val actorUid: String = "",
     val adminEmail: String = "",
     val adminRole: String = "",
     val actionType: String = "",

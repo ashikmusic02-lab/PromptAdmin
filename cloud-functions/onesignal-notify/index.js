@@ -2,11 +2,9 @@
  * PROMPTADMIN — PRIVILEGED FIREBASE CLOUD FUNCTIONS (GEN 2)
  *
  * Deployment Instructions:
- * 1. Note: Firebase Cloud Functions (Gen 2) and Google Cloud Secret Manager require
- *    the Firebase Blaze (pay-as-you-go) billing plan.
- * 2. Set your private OneSignal REST API Key in Secret Manager (NEVER in the Android app):
+ * 1. Set your private OneSignal REST API Key in Secret Manager (NEVER in the Android app):
  *    firebase functions:secrets:set ONESIGNAL_REST_API_KEY
- * 3. Deploy functions:
+ * 2. Deploy functions:
  *    firebase deploy --only functions
  */
 
@@ -18,26 +16,29 @@ admin.initializeApp();
 const db = admin.firestore();
 const ONESIGNAL_REST_API_KEY = defineSecret("ONESIGNAL_REST_API_KEY");
 
+const ADMIN_EMAIL_ALLOWLIST = ["sfforhadvai@gmail.com"];
+
 /**
- * Verifies the caller's Firebase ID Token and checks that their adminUsers/{uid}
- * record is active and belongs to one of the allowed roles.
+ * Verifies the caller's Firebase ID Token and checks that they signed in with Google,
+ * have a verified email, and are in ADMIN_EMAIL_ALLOWLIST.
  */
-async function verifyAdminCaller(req, allowedRoles) {
+async function verifyAdminCaller(req) {
   const authHeader = req.headers.authorization || "";
   if (!authHeader.startsWith("Bearer ")) {
     throw new Error("Missing or invalid Authorization Bearer token.");
   }
   const idToken = authHeader.substring("Bearer ".length).trim();
   const decoded = await admin.auth().verifyIdToken(idToken);
-  const adminSnap = await db.collection("adminUsers").doc(decoded.uid).get();
-  if (!adminSnap.exists || adminSnap.data().active !== true) {
-    throw new Error("Caller is not an active administrator.");
+  const provider = decoded.firebase && decoded.firebase.sign_in_provider;
+  const email = (decoded.email || "").toLowerCase();
+  if (
+    provider !== "google.com" ||
+    decoded.email_verified !== true ||
+    !ADMIN_EMAIL_ALLOWLIST.includes(email)
+  ) {
+    throw new Error("Access denied: caller is not an allowlisted Google administrator.");
   }
-  const role = adminSnap.data().role;
-  if (!allowedRoles.includes(role)) {
-    throw new Error(`Insufficient role (${role}). Required: ${allowedRoles.join(", ")}`);
-  }
-  return { uid: decoded.uid, email: decoded.email || "", role };
+  return { uid: decoded.uid, email: decoded.email || "", role: "OWNER" };
 }
 
 /**
@@ -50,7 +51,7 @@ exports.sendOneSignalNotification = onRequest(
       if (req.method !== "POST") {
         return res.status(405).json({ error: "Method Not Allowed" });
       }
-      const caller = await verifyAdminCaller(req, ["OWNER", "ADMINISTRATOR"]);
+      const caller = await verifyAdminCaller(req);
       const {
         notificationId,
         oneSignalAppId,
@@ -124,13 +125,13 @@ exports.sendOneSignalNotification = onRequest(
       }
 
       await db.collection("adminActivityLogs").add({
-        adminUid: caller.uid,
+        actorUid: caller.uid,
         adminEmail: caller.email,
         adminRole: caller.role,
         actionType: "ONESIGNAL_PUSH_DISPATCH",
         targetEntity: `notifications/${notificationId || "direct"}`,
         summary: `Dispatched push "${title}" -> ${deepLink} (${status})`,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
+        createdAtMillis: Date.now()
       });
 
       return res.status(response.ok ? 200 : 502).json({
@@ -155,7 +156,7 @@ exports.manageUserAccount = onRequest({ cors: true }, async (req, res) => {
     if (req.method !== "POST") {
       return res.status(405).json({ error: "Method Not Allowed" });
     }
-    const caller = await verifyAdminCaller(req, ["OWNER", "ADMINISTRATOR"]);
+    const caller = await verifyAdminCaller(req);
     const { targetUserId, disableAccount, reason } = req.body;
     if (!targetUserId) {
       return res.status(400).json({ error: "targetUserId is required" });
@@ -174,13 +175,13 @@ exports.manageUserAccount = onRequest({ cors: true }, async (req, res) => {
     );
 
     await db.collection("adminActivityLogs").add({
-      adminUid: caller.uid,
+      actorUid: caller.uid,
       adminEmail: caller.email,
       adminRole: caller.role,
       actionType: disableAccount ? "USER_ACCOUNT_DISABLED" : "USER_ACCOUNT_RESTORED",
       targetEntity: `users/${targetUserId}`,
       summary: `${disableAccount ? "Disabled" : "Restored"} user ${targetUserId}. Reason: ${reason || "Admin action"}`,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+      createdAtMillis: Date.now()
     });
 
     return res.status(200).json({ success: true, accountStatus: newStatus });

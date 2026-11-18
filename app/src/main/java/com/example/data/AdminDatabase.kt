@@ -26,7 +26,7 @@ import com.example.model.PromptImageEntity
         AdminAccountEntity::class,
         ActivityLogEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AdminDatabase : RoomDatabase() {

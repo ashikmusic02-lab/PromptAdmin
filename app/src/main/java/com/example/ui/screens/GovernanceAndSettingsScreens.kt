@@ -19,14 +19,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -34,7 +31,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.FirebaseConnectionStatus
@@ -68,7 +63,6 @@ import com.example.ui.components.PermissionGuardBanner
 import com.example.ui.components.SectionHeaderBar
 import com.example.ui.components.StatusPill
 import com.example.ui.components.formatTimestamp
-import com.example.ui.theme.ChampagneContainer
 import com.example.ui.theme.ChampagneGold
 import com.example.ui.theme.ChampagneLight
 import com.example.ui.theme.GraphiteBorder
@@ -76,16 +70,15 @@ import com.example.ui.theme.GraphiteCard
 import com.example.ui.theme.GraphiteElevated
 import com.example.ui.theme.JetBrainsMonoFamily
 import com.example.ui.theme.ObsidianBg
-import com.example.ui.theme.StatusAmber
 import com.example.ui.theme.StatusEmerald
 import com.example.ui.theme.StatusRose
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VioletBright
-import com.example.ui.theme.VioletContainer
 import com.example.ui.theme.VioletPrimary
 import com.example.viewmodel.AdminSession
+import com.example.viewmodel.AdminViewModel
 
 // ============================================================================
 // MODULE 11: APP CONTENT MANAGEMENT
@@ -170,7 +163,6 @@ fun AppContentManagementScreen(
             )
         }
 
-        // Live Feed Curation Summary
         Card(
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
             border = BorderStroke(1.dp, GraphiteBorder),
@@ -256,7 +248,6 @@ fun AppContentManagementScreen(
             }
         }
 
-        // Branding, Legal & Store Links
         Card(
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
             border = BorderStroke(1.dp, GraphiteBorder),
@@ -371,12 +362,12 @@ fun AdministratorManagementScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         SectionHeaderBar(
             sectionNumber = 12,
-            title = "Administrator & RBAC Permission Management",
-            subtitle = "Enforce role-based access control across Owner, Administrator, and Moderator clearances. Synchronized with Firestore adminUsers/{uid} and enforced by Security Rules.",
+            title = "Administrator & Allowlist Governance",
+            subtitle = "Admin access in firestore.rules and Firebase Auth is strictly governed by Google Sign-In and the verified email allowlist (isOwnerEmail).",
             trailingContent = {
                 if (session.role.canManageAdmins) {
                     Button(
@@ -386,13 +377,12 @@ fun AdministratorManagementScreen(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Authorize Administrator")
+                        Text("Add Admin Record")
                     }
                 }
             }
         )
 
-        // Active Session & RBAC Clearance Switcher
         Card(
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
             border = BorderStroke(1.dp, ChampagneGold.copy(alpha = 0.55f)),
@@ -411,12 +401,12 @@ fun AdministratorManagementScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Active Administrator Session: ${session.displayName} (${session.email})",
+                            text = "Active Google Owner Session: ${session.displayName} (${session.email})",
                             style = MaterialTheme.typography.titleLarge,
                             color = TextPrimary
                         )
                         Text(
-                            text = "UID: ${session.uid} • Auth Method: ${session.authMethod}",
+                            text = "UID: ${session.uid} • Provider: ${session.authMethod}",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -425,7 +415,7 @@ fun AdministratorManagementScreen(
                 }
 
                 Text(
-                    text = "Test Role-Based Access Enforcement (Switch Active Clearance):",
+                    text = "Active ADMIN_EMAIL_ALLOWLIST:",
                     style = MaterialTheme.typography.labelMedium,
                     color = ChampagneLight
                 )
@@ -433,45 +423,13 @@ fun AdministratorManagementScreen(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    AdminRole.entries.forEach { roleOption ->
-                        FilterChip(
-                            selected = session.role == roleOption,
-                            onClick = { onSwitchPreviewRole(roleOption) },
-                            label = { Text("Preview as ${roleOption.displayName}") }
-                        )
+                    AdminViewModel.ADMIN_EMAIL_ALLOWLIST.forEach { allowedEmail ->
+                        MonospaceBadge(allowedEmail)
                     }
                 }
             }
         }
 
-        // Permission Matrix
-        Card(
-            colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "Role-Based Permission Matrix (Backend Enforced in firestore.rules)",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = TextPrimary
-                )
-                PermissionRow("Image & Prompt CRUD (URL-Only)", "Allowed", "Allowed", "Read-Only")
-                PermissionRow("Category Management & Migration", "Allowed", "Allowed", "Read-Only")
-                PermissionRow("User Account Disable / Restore", "Allowed", "Allowed", "Read-Only")
-                PermissionRow("Comment Moderation & Admin Reply", "Allowed", "Allowed", "Allowed")
-                PermissionRow("Google AdMob Unit & Policy Config", "Allowed", "Allowed", "Read-Only")
-                PermissionRow("OneSignal Push Notification Dispatch", "Allowed", "Allowed", "Denied")
-                PermissionRow("Administrator & Role Provisioning", "Allowed", "Denied", "Denied")
-            }
-        }
-
-        // Registered Administrators List
         Card(
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
             border = BorderStroke(1.dp, GraphiteBorder),
@@ -484,13 +442,13 @@ fun AdministratorManagementScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Authorized Administrator Accounts (${adminAccounts.size})",
+                    text = "Admin Records in adminUsers (${adminAccounts.size})",
                     style = MaterialTheme.typography.titleLarge,
                     color = TextPrimary
                 )
 
                 adminAccounts.forEach { adm ->
-                    val admRole = runCatching { AdminRole.valueOf(adm.role) }.getOrDefault(AdminRole.MODERATOR)
+                    val admRole = runCatching { AdminRole.valueOf(adm.role) }.getOrDefault(AdminRole.OWNER)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -536,19 +494,19 @@ fun AdministratorManagementScreen(
         var uid by remember { mutableStateOf("") }
         var email by remember { mutableStateOf("") }
         var displayName by remember { mutableStateOf("") }
-        var selectedRole by remember { mutableStateOf(AdminRole.ADMINISTRATOR) }
+        var selectedRole by remember { mutableStateOf(AdminRole.OWNER) }
         var active by remember { mutableStateOf(true) }
 
         AlertDialog(
             onDismissRequest = { showAddAdminDialog = false },
             containerColor = GraphiteElevated,
-            title = { Text("Authorize Administrator Account", color = TextPrimary) },
+            title = { Text("Add Admin Account Record", color = TextPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        label = { Text("Administrator Email") },
+                        label = { Text("Administrator Google Email") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -562,11 +520,10 @@ fun AdministratorManagementScreen(
                     OutlinedTextField(
                         value = uid,
                         onValueChange = { uid = it },
-                        label = { Text("Firebase Auth UID (Optional — auto-derived if blank)") },
+                        label = { Text("Firebase Auth UID") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text("Select Role:", style = MaterialTheme.typography.labelMedium, color = ChampagneLight)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AdminRole.entries.forEach { r ->
                             FilterChip(
@@ -594,7 +551,7 @@ fun AdministratorManagementScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = VioletPrimary)
                 ) {
-                    Text("Save Administrator")
+                    Text("Save Record")
                 }
             },
             dismissButton = {
@@ -606,25 +563,8 @@ fun AdministratorManagementScreen(
     }
 }
 
-@Composable
-private fun PermissionRow(capability: String, owner: String, admin: String, mod: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(ObsidianBg, RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = capability, style = MaterialTheme.typography.bodySmall, color = TextPrimary, modifier = Modifier.weight(1.6f))
-        Text(text = "Owner: $owner", style = MaterialTheme.typography.labelSmall, color = ChampagneLight, modifier = Modifier.weight(0.8f))
-        Text(text = "Admin: $admin", style = MaterialTheme.typography.labelSmall, color = VioletBright, modifier = Modifier.weight(0.8f))
-        Text(text = "Mod: $mod", style = MaterialTheme.typography.labelSmall, color = TextSecondary, modifier = Modifier.weight(0.8f))
-    }
-}
-
 // ============================================================================
-// MODULE 13: SECURITY & ACTIVITY LOGS
+// MODULE 13: SECURITY & ACTIVITY LOGS (REQUIRES actorUid == request.auth.uid)
 // ============================================================================
 @Composable
 fun SecurityActivityLogsScreen(
@@ -651,7 +591,7 @@ fun SecurityActivityLogsScreen(
         SectionHeaderBar(
             sectionNumber = 13,
             title = "Security & Immutable Activity Logs",
-            subtitle = "Complete tamper-evident audit trail of all administrative mutations across images, categories, users, comments, AdMob, OneSignal, and RBAC."
+            subtitle = "Tamper-evident audit trail of all administrative mutations (enforcing actorUid == request.auth.uid in firestore.rules)."
         )
 
         OutlinedTextField(
@@ -666,7 +606,7 @@ fun SecurityActivityLogsScreen(
         if (filteredLogs.isEmpty()) {
             EmptyDataStateCard(
                 title = "No Matching Audit Entries",
-                message = "Every administrative operation is automatically recorded in adminActivityLogs.",
+                message = "Every administrative operation is automatically recorded in adminActivityLogs with actorUid.",
                 icon = Icons.Default.History
             )
         } else {
@@ -707,7 +647,7 @@ fun SecurityActivityLogsScreen(
                             color = TextPrimary
                         )
                         Text(
-                            text = "Actor: ${log.adminEmail} (${log.adminRole}) • UID: ${log.adminUid}",
+                            text = "Actor: ${log.adminEmail} (${log.adminRole}) • actorUid: ${log.actorUid}",
                             style = MaterialTheme.typography.labelSmall,
                             color = ChampagneLight
                         )
@@ -747,7 +687,7 @@ fun PlatformSettingsScreen(
         SectionHeaderBar(
             sectionNumber = 14,
             title = "System Settings, Firebase Sync & Credentials Guide",
-            subtitle = "Configure deep-link schemes, OneSignal server endpoints, and synchronize local staging data with your shared Firebase project once app/google-services.json is uploaded.",
+            subtitle = "Configure deep-link schemes, OneSignal server endpoints, and synchronize with Firebase project '${connectionStatus.projectId}'.",
             trailingContent = {
                 if (activeRole.canManageAppContent) {
                     Button(
@@ -774,7 +714,6 @@ fun PlatformSettingsScreen(
             }
         )
 
-        // 1. Firebase google-services.json Readiness & Two-Way Sync Card
         Card(
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
             border = BorderStroke(1.dp, ChampagneGold.copy(alpha = 0.6f)),
@@ -792,12 +731,12 @@ fun PlatformSettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Shared Firebase Backend & google-services.json Status",
+                        text = "Firebase Project & google-services.json Status",
                         style = MaterialTheme.typography.titleLarge,
                         color = TextPrimary
                     )
                     StatusPill(
-                        label = if (connectionStatus.isGoogleServicesPresent) "LIVE FIRESTORE READY" else "READY FOR JSON UPLOAD",
+                        label = if (connectionStatus.isGoogleServicesPresent) "FIRESTORE CONNECTED" else "AWAITING JSON",
                         tone = if (connectionStatus.isGoogleServicesPresent) "SUCCESS" else "GOLD"
                     )
                 }
@@ -819,33 +758,33 @@ fun PlatformSettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "ADD THIS ANDROID ADMIN APP IN YOUR FIREBASE CONSOLE:",
+                            text = "FIREBASE CONFIGURATION DETAILS:",
                             style = MaterialTheme.typography.labelSmall,
                             color = ChampagneLight
                         )
                         Text(
-                            text = "• Android Package Name: com.aistudio.promptadmin.vqxkrm",
+                            text = "• Firebase Project ID: ${connectionStatus.projectId}",
                             fontFamily = JetBrainsMonoFamily,
                             style = MaterialTheme.typography.bodySmall,
                             color = TextPrimary
                         )
                         Text(
-                            text = "• Debug SHA-1: 65:FD:A0:D0:AE:1E:18:3A:AC:77:B5:47:78:05:00:3C:E0:C2:E1:CF",
+                            text = "• Android Package Name: ${connectionStatus.applicationId}",
                             fontFamily = JetBrainsMonoFamily,
                             style = MaterialTheme.typography.bodySmall,
                             color = TextPrimary
                         )
                         Text(
-                            text = "• Debug SHA-256: F8:65:1C:AA:7D:4B:7D:96:73:83:BC:2E:F0:91:D0:26:CA:22:7E:27:26:39:5B:CD:83:9D:53:AA:A6:D1:11:38",
-                            fontFamily = JetBrainsMonoFamily,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = "• Upload Destination in File Explorer: /app/google-services.json",
+                            text = "• Allowlisted Owner Email: sfforhadvai@gmail.com",
                             fontFamily = JetBrainsMonoFamily,
                             style = MaterialTheme.typography.bodySmall,
                             color = StatusEmerald
+                        )
+                        Text(
+                            text = "• Prompt Isolation: Public metadata in /images/{id}, protected prompts in /imagePrompts/{id}",
+                            fontFamily = JetBrainsMonoFamily,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = VioletBright
                         )
                     }
                 }
@@ -866,12 +805,11 @@ fun PlatformSettingsScreen(
                         Icon(Icons.Default.CloudSync, contentDescription = null)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Push Local Staging Data & Synchronize All Collections with Firestore")
+                    Text("Synchronize All Collections with Cloud Firestore")
                 }
             }
         }
 
-        // 2. Deep Link & Server Endpoint Configuration
         Card(
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
             border = BorderStroke(1.dp, GraphiteBorder),
@@ -896,14 +834,14 @@ fun PlatformSettingsScreen(
                     OutlinedTextField(
                         value = deepLinkScheme,
                         onValueChange = { deepLinkScheme = it },
-                        label = { Text("Internal Deep Link Scheme (e.g. promptvault)") },
+                        label = { Text("Internal Deep Link Scheme") },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
                         value = verifiedDomainHost,
                         onValueChange = { verifiedDomainHost = it },
-                        label = { Text("Verified App Links Host (e.g. promptvault.app)") },
+                        label = { Text("Verified App Links Host") },
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -921,7 +859,6 @@ fun PlatformSettingsScreen(
                     value = oneSignalFnUrl,
                     onValueChange = { oneSignalFnUrl = it },
                     label = { Text("Secure OneSignal Cloud Function URL (sendOneSignalNotification)") },
-                    placeholder = { Text("https://us-central1-your-project.cloudfunctions.net/sendOneSignalNotification") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -930,51 +867,8 @@ fun PlatformSettingsScreen(
                     value = adminAuthFnUrl,
                     onValueChange = { adminAuthFnUrl = it },
                     label = { Text("Firebase Auth User Admin Cloud Function URL (manageUserAccount)") },
-                    placeholder = { Text("https://us-central1-your-project.cloudfunctions.net/manageUserAccount") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Require Pre-Moderation for New User Comments", color = TextPrimary, style = MaterialTheme.typography.titleMedium)
-                        Text("When enabled, new user comments enter PENDING state until approved by a Moderator/Admin.", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Switch(checked = requirePreModeration, onCheckedChange = { requirePreModeration = it })
-                }
-            }
-        }
-
-        // 3. Firebase Free-Tier vs Blaze Plan Considerations
-        Card(
-            colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Firebase Free-Tier (Spark) vs. Paid (Blaze) Transparency",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = ChampagneLight
-                )
-                Text(
-                    text = "• Free Tier (Spark Plan) Included: Cloud Firestore (50,000 reads/day, 20,000 writes/day, 1 GiB storage), Firebase Authentication (Google Sign-In), and Firestore Security Rules (/firestore.rules). All image and category records store external URLs only, consuming zero Firebase Storage bandwidth.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "• Requires Blaze (Pay-As-You-Go) Plan if Deployed: Deploying outbound HTTPS Cloud Functions (/cloud-functions/onesignal-notify/index.js) and Google Cloud Secret Manager (for ONESIGNAL_REST_API_KEY) requires the Firebase Blaze plan. No paid services are enabled automatically.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
                 )
             }
         }

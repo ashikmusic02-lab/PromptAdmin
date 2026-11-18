@@ -2,7 +2,7 @@
   "entities": {
     "PromptImage": {
       "title": "PromptImage",
-      "description": "AI Photo Inspiration & Prompt Library item managed strictly via direct external image URL.",
+      "description": "Public AI Photo Inspiration metadata managed strictly via direct external image URL (does not expose the protected generation prompt).",
       "type": "object",
       "properties": {
         "imageUrl": { "type": "string", "description": "Direct external image URL (.jpg, .jpeg, .png, .webp)" },
@@ -11,23 +11,32 @@
         "description": { "type": "string", "description": "Detailed description and style notes" },
         "categoryId": { "type": "string", "description": "Foreign key to categories collection" },
         "categoryName": { "type": "string", "description": "Denormalized category name" },
-        "prompt": { "type": "string", "description": "Full AI image generation prompt" },
         "featured": { "type": "boolean", "description": "Whether highlighted in Featured carousel" },
         "trending": { "type": "boolean", "description": "Whether highlighted in Trending section" },
         "status": { "type": "string", "enum": ["PUBLISHED", "DRAFT"], "description": "Publication state" },
         "displayOrder": { "type": "integer", "description": "Numeric sort priority" },
-        "deepLink": { "type": "string", "description": "Auto-generated internal app destination (e.g., promptvault://image/{id})" },
-        "viewsCount": { "type": "integer", "description": "Total image detail views" },
-        "uniqueViewsCount": { "type": "integer", "description": "Unique authenticated user views" },
-        "likesCount": { "type": "integer", "description": "Total likes count" },
-        "commentsCount": { "type": "integer", "description": "Total visible comments count" },
-        "promptUnlocksCount": { "type": "integer", "description": "Total successful prompt unlocks via rewarded ad or direct unlock" },
-        "sharesCount": { "type": "integer", "description": "Total share events" },
-        "createdByUid": { "type": "string", "description": "Admin UID who created the record" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "deepLink": { "type": "string", "description": "Auto-generated internal app destination" },
+        "viewsCount": { "type": "integer" },
+        "uniqueViewsCount": { "type": "integer" },
+        "likesCount": { "type": "integer" },
+        "commentsCount": { "type": "integer" },
+        "promptUnlocksCount": { "type": "integer" },
+        "sharesCount": { "type": "integer" },
+        "createdByUid": { "type": "string" }
       },
-      "required": ["imageUrl", "shortName", "title", "categoryId", "prompt", "status", "displayOrder", "deepLink"]
+      "required": ["imageUrl", "shortName", "title", "categoryId", "status", "displayOrder", "deepLink"]
+    },
+    "ImagePromptSecret": {
+      "title": "ImagePromptSecret",
+      "description": "Protected AI generation prompt stored separately in /imagePrompts/{imageId}, readable only by staff or users with a promptUnlocks/{uid}_{imageId} record.",
+      "type": "object",
+      "properties": {
+        "imageId": { "type": "string" },
+        "prompt": { "type": "string" },
+        "updatedByUid": { "type": "string" },
+        "updatedAtMillis": { "type": "integer" }
+      },
+      "required": ["imageId", "prompt"]
     },
     "PromptCategory": {
       "title": "PromptCategory",
@@ -38,10 +47,7 @@
         "description": { "type": "string" },
         "thumbnailUrl": { "type": "string" },
         "displayOrder": { "type": "integer" },
-        "active": { "type": "boolean" },
-        "imageCount": { "type": "integer" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "active": { "type": "boolean" }
       },
       "required": ["name", "thumbnailUrl", "displayOrder", "active"]
     },
@@ -56,15 +62,13 @@
         "likesCount": { "type": "integer" },
         "commentsCount": { "type": "integer" },
         "unlocksCount": { "type": "integer" },
-        "reportedCount": { "type": "integer" },
-        "registeredAt": { "type": "string", "format": "date-time" },
-        "lastActivityAt": { "type": "string", "format": "date-time" }
+        "reportedCount": { "type": "integer" }
       },
       "required": ["username", "accountStatus"]
     },
     "ImageComment": {
       "title": "ImageComment",
-      "description": "User comment on an image, synchronized with comment moderation controls.",
+      "description": "User comment on an image (user creates must have moderationStatus == 'PENDING').",
       "type": "object",
       "properties": {
         "imageId": { "type": "string" },
@@ -76,65 +80,32 @@
         "reported": { "type": "boolean" },
         "reportReason": { "type": "string" },
         "adminReply": { "type": "string" },
-        "moderatedBy": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "moderatedByEmail": { "type": "string" }
       },
       "required": ["imageId", "userId", "username", "content", "moderationStatus"]
     },
-    "AdvertisementConfig": {
-      "title": "AdvertisementConfig",
-      "description": "Google AdMob configuration synchronized with the user application.",
+    "AdminActivityLog": {
+      "title": "AdminActivityLog",
+      "description": "Immutable administrator activity log entry requiring actorUid == request.auth.uid.",
       "type": "object",
       "properties": {
-        "admobAppId": { "type": "string" },
-        "bannerAdUnitId": { "type": "string" },
-        "rewardedAdUnitId": { "type": "string" },
-        "interstitialAdUnitId": { "type": "string" },
-        "testModeEnabled": { "type": "boolean" },
-        "globalAdsEnabled": { "type": "boolean" },
-        "homeBannerEnabled": { "type": "boolean" },
-        "detailBannerEnabled": { "type": "boolean" },
-        "rewardedAdsEnabled": { "type": "boolean" },
-        "interstitialAdsEnabled": { "type": "boolean" },
-        "interstitialFrequencyActions": { "type": "integer" },
-        "minInterstitialIntervalSeconds": { "type": "integer" },
-        "placementStrategy": { "type": "string" },
-        "rewardPolicy": { "type": "string" },
-        "fallbackBehavior": { "type": "string" },
-        "updatedByUid": { "type": "string" },
-        "updatedAt": { "type": "string", "format": "date-time" }
+        "actorUid": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "adminRole": { "type": "string" },
+        "actionType": { "type": "string" },
+        "targetEntity": { "type": "string" },
+        "summary": { "type": "string" },
+        "createdAtMillis": { "type": "integer" }
       },
-      "required": ["admobAppId", "globalAdsEnabled", "testModeEnabled"]
-    },
-    "PushNotificationRecord": {
-      "title": "PushNotificationRecord",
-      "description": "OneSignal push notification record with automatic deep link generation.",
-      "type": "object",
-      "properties": {
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "targetAudience": { "type": "string", "enum": ["ALL_SUBSCRIBED", "ACTIVE_USERS", "HIGH_ENGAGEMENT", "NEW_USERS"] },
-        "imageId": { "type": "string" },
-        "imageTitle": { "type": "string" },
-        "imageThumbnailUrl": { "type": "string" },
-        "deepLink": { "type": "string" },
-        "scheduleType": { "type": "string", "enum": ["SEND_NOW", "SCHEDULE_LATER"] },
-        "scheduledAt": { "type": "string" },
-        "sendingStatus": { "type": "string", "enum": ["QUEUED_FOR_SERVER", "SCHEDULED", "DISPATCHED_PROVIDER_CONFIRMED", "FAILED"] },
-        "deliveryDetails": { "type": "string" },
-        "createdByUid": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["title", "message", "targetAudience", "deepLink", "sendingStatus"]
+      "required": ["actorUid", "adminEmail", "actionType", "targetEntity", "summary"]
     }
   },
   "firestore": {
-    "/images/{imageId}": { "schema": { "$ref": "#/entities/PromptImage" }, "description": "Prompt library images (URL-only)" },
+    "/images/{imageId}": { "schema": { "$ref": "#/entities/PromptImage" }, "description": "Public image metadata (no prompt field)" },
+    "/imagePrompts/{imageId}": { "schema": { "$ref": "#/entities/ImagePromptSecret" }, "description": "Protected generation prompts readable only by staff or unlocked users" },
     "/categories/{categoryId}": { "schema": { "$ref": "#/entities/PromptCategory" }, "description": "Image categories" },
     "/users/{userId}": { "schema": { "$ref": "#/entities/AppUserRecord" }, "description": "User application accounts" },
     "/comments/{commentId}": { "schema": { "$ref": "#/entities/ImageComment" }, "description": "Moderated user comments" },
-    "/advertisementSettings/{configId}": { "schema": { "$ref": "#/entities/AdvertisementConfig" }, "description": "AdMob settings" },
-    "/notifications/{notificationId}": { "schema": { "$ref": "#/entities/PushNotificationRecord" }, "description": "OneSignal notification history" }
+    "/adminActivityLogs/{logId}": { "schema": { "$ref": "#/entities/AdminActivityLog" }, "description": "Immutable admin audit logs" }
   }
 }

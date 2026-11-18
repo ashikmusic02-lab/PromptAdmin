@@ -2,7 +2,9 @@ package com.example
 
 import com.example.util.UrlAndDeepLinkValidator
 import com.example.util.UrlValidationResult
+import com.example.viewmodel.AdminViewModel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,5 +34,14 @@ class ExampleUnitTest {
     fun automaticDeepLinkGenerator_createsConsistentSchemeDestination() {
         val deepLink = UrlAndDeepLinkValidator.buildAutoDeepLink("promptvault", "img_neon_12345678")
         assertEquals("promptvault://image/img_neon_12345678", deepLink)
+    }
+
+    @Test
+    fun adminEmailAllowlist_acceptsOnlyVerifiedAllowlistedGmail() {
+        assertTrue(AdminViewModel.isAuthorizedAdminEmail("sfforhadvai@gmail.com", true))
+        assertTrue(AdminViewModel.isAuthorizedAdminEmail("SFFORHADVAI@GMAIL.COM", true))
+        assertFalse(AdminViewModel.isAuthorizedAdminEmail("sfforhadvai@gmail.com", false))
+        assertFalse(AdminViewModel.isAuthorizedAdminEmail("intruder@gmail.com", true))
+        assertFalse(AdminViewModel.isAuthorizedAdminEmail(null, true))
     }
 }

@@ -146,6 +146,7 @@ fun PromptAdminRootApp(
     val bannerMessage by adminViewModel.statusBannerMessage.collectAsStateWithLifecycle()
     val isErrorBanner by adminViewModel.isErrorBanner.collectAsStateWithLifecycle()
     val isSyncing by adminViewModel.isSyncing.collectAsStateWithLifecycle()
+    val authErrorMessage by adminViewModel.authErrorMessage.collectAsStateWithLifecycle()
 
     Surface(
         modifier = Modifier
@@ -157,9 +158,9 @@ fun PromptAdminRootApp(
         if (!session.isAuthenticated) {
             AdminAuthScreen(
                 connectionStatus = connectionStatus,
-                onAuthenticated = { uid, email, name, role, method ->
-                    adminViewModel.signInAdmin(uid, email, name, role, method)
-                }
+                externalAuthError = authErrorMessage,
+                onGoogleFirebaseUserAuthenticated = adminViewModel::onGoogleFirebaseUserAuthenticated,
+                onSetAuthError = adminViewModel::setAuthErrorMessage
             )
         } else {
             // BackHandler returns from any secondary module to Dashboard Overview

@@ -6,8 +6,6 @@ import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,24 +22,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,7 +44,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -60,53 +51,52 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import com.example.BuildConfig
 import com.example.R
 import com.example.data.FirebaseConnectionStatus
-import com.example.model.AdminRole
 import com.example.ui.components.MonospaceBadge
 import com.example.ui.components.StatusPill
-import com.example.ui.theme.ChampagneContainer
 import com.example.ui.theme.ChampagneGold
 import com.example.ui.theme.ChampagneLight
 import com.example.ui.theme.GraphiteBorder
 import com.example.ui.theme.GraphiteCard
-import com.example.ui.theme.GraphiteElevated
 import com.example.ui.theme.ObsidianBg
-import com.example.ui.theme.StatusAmber
 import com.example.ui.theme.StatusEmerald
 import com.example.ui.theme.StatusRose
-import com.example.ui.theme.TextMuted
+import com.example.ui.theme.StatusRoseBg
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.example.ui.theme.VioletBright
 import com.example.ui.theme.VioletContainer
 import com.example.ui.theme.VioletPrimary
+import com.example.viewmodel.AdminViewModel
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 @Composable
 fun AdminAuthScreen(
     connectionStatus: FirebaseConnectionStatus,
-    onAuthenticated: (uid: String, email: String, displayName: String, role: AdminRole, authMethod: String) -> Unit
+    externalAuthError: String?,
+    onGoogleFirebaseUserAuthenticated: (FirebaseUser?) -> Unit,
+    onSetAuthError: (String?) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    var adminEmail by remember { mutableStateOf("sfforhadvai@gmail.com") }
-    var adminName by remember { mutableStateOf("Principal System Owner") }
-    var selectedRole by remember { mutableStateOf(AdminRole.OWNER) }
     var isGoogleLoading by remember { mutableStateOf(false) }
-    var authError by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
@@ -125,7 +115,7 @@ fun AdminAuthScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 620.dp),
+                    .widthIn(max = 560.dp),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
                 border = BorderStroke(1.dp, GraphiteBorder),
                 shape = RoundedCornerShape(24.dp)
@@ -135,7 +125,7 @@ fun AdminAuthScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(175.dp)
+                            .height(185.dp)
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.img_admin_hero_1794988005953),
@@ -165,9 +155,9 @@ fun AdminAuthScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                StatusPill(label = "SEPARATE ADMIN PROJECT", tone = "GOLD")
+                                StatusPill(label = "GOOGLE SIGN-IN ONLY", tone = "GOLD")
                                 StatusPill(
-                                    label = if (connectionStatus.isGoogleServicesPresent) "FIRESTORE LIVE" else "READY FOR google-services.json",
+                                    label = "PROJECT: ${connectionStatus.projectId.uppercase()}",
                                     tone = if (connectionStatus.isGoogleServicesPresent) "SUCCESS" else "VIOLET"
                                 )
                             }
@@ -191,7 +181,7 @@ fun AdminAuthScreen(
                             .padding(22.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
-                        // Firebase google-services.json Status Banner
+                        // Firebase Project & Package Status Banner
                         Surface(
                             color = if (connectionStatus.isGoogleServicesPresent) {
                                 StatusEmerald.copy(alpha = 0.12f)
@@ -229,44 +219,85 @@ fun AdminAuthScreen(
                                         color = TextPrimary
                                     )
                                 }
-                                Text(
-                                    text = "Package Name: ${connectionStatus.applicationId} • SHA-1: 65:FD:A0:D0:AE:1E:18:3A:AC:77:B5:47:78:05:00:3C:E0:C2:E1:CF",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = ChampagneLight
-                                )
+                                MonospaceBadge("Package: ${connectionStatus.applicationId}")
                             }
                         }
 
-                        if (authError != null) {
-                            Surface(
-                                color = StatusRose.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, StatusRose)
+                        // Strict Allowlist Security Policy Box
+                        Surface(
+                            color = ObsidianBg,
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, GraphiteBorder)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text(
-                                    text = authError!!,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = StatusRose,
-                                    modifier = Modifier.padding(12.dp)
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Strict Allowlist Gate",
+                                    tint = ChampagneLight,
+                                    modifier = Modifier.size(22.dp)
                                 )
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "Zero-Trust Google Allowlist Authentication",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "Authentication is restricted exclusively to verified Google accounts listed in ADMIN_EMAIL_ALLOWLIST. Unlisted or unverified accounts are signed out immediately.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
                             }
                         }
 
-                        // Google Sign-In via Credential Manager (Active when google-services.json is present)
-                        OutlinedButton(
+                        if (!externalAuthError.isNullOrBlank()) {
+                            Surface(
+                                color = StatusRoseBg,
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, StatusRose),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("auth_error_banner")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ErrorOutline,
+                                        contentDescription = "Access denied",
+                                        tint = StatusRose
+                                    )
+                                    Text(
+                                        text = externalAuthError,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = StatusRose
+                                    )
+                                }
+                            }
+                        }
+
+                        // Single Exclusive Authentication Action: Google Sign-In via Credential Manager
+                        Button(
                             onClick = {
-                                authError = null
+                                onSetAuthError(null)
                                 isGoogleLoading = true
-                                launchGoogleCredentialManagerSignIn(
+                                launchGoogleSignInOnly(
                                     context = context,
                                     scope = scope,
-                                    onSuccess = { uid, email, name ->
+                                    onAuthenticatedUser = { firebaseUser ->
                                         isGoogleLoading = false
-                                        onAuthenticated(uid, email, name, selectedRole, "Firebase Google Sign-In")
+                                        onGoogleFirebaseUserAuthenticated(firebaseUser)
                                     },
                                     onError = { msg ->
                                         isGoogleLoading = false
-                                        authError = msg
+                                        onSetAuthError(msg)
                                     },
                                     onCancelled = {
                                         isGoogleLoading = false
@@ -276,168 +307,34 @@ fun AdminAuthScreen(
                             enabled = !isGoogleLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(50.dp)
+                                .height(54.dp)
                                 .testTag("google_sign_in_button"),
-                            border = BorderStroke(1.dp, ChampagneGold.copy(alpha = 0.65f)),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            if (isGoogleLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = ChampagneLight
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.VerifiedUser,
-                                    contentDescription = "Google Sign-In",
-                                    tint = ChampagneLight,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Sign in with Google (Firebase Auth Credential Manager)",
-                                    color = ChampagneLight,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            HorizontalDivider(modifier = Modifier.weight(1f), color = GraphiteBorder)
-                            Text(
-                                text = "ROLE-BASED ADMIN CONSOLE ACCESS",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextMuted
-                            )
-                            HorizontalDivider(modifier = Modifier.weight(1f), color = GraphiteBorder)
-                        }
-
-                        // Administrator Identity Inputs
-                        OutlinedTextField(
-                            value = adminEmail,
-                            onValueChange = { adminEmail = it },
-                            label = { Text("Administrator Email") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("admin_email_input")
-                        )
-
-                        OutlinedTextField(
-                            value = adminName,
-                            onValueChange = { adminName = it },
-                            label = { Text("Administrator Display Name") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("admin_name_input")
-                        )
-
-                        // Role Selector Cards (Owner, Administrator, Moderator)
-                        Text(
-                            text = "Select Administrative Clearance Role",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = TextSecondary
-                        )
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            AdminRole.entries.forEach { roleOption ->
-                                val isSelected = selectedRole == roleOption
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable { selectedRole = roleOption }
-                                        .testTag("role_option_${roleOption.name.lowercase()}"),
-                                    color = if (isSelected) VioletContainer else GraphiteElevated,
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(
-                                        width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) VioletPrimary else GraphiteBorder
-                                    )
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Text(
-                                                    text = roleOption.displayName,
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    color = TextPrimary
-                                                )
-                                                StatusPill(
-                                                    label = roleOption.badgeLabel,
-                                                    tone = when (roleOption) {
-                                                        AdminRole.OWNER -> "GOLD"
-                                                        AdminRole.ADMINISTRATOR -> "VIOLET"
-                                                        AdminRole.MODERATOR -> "CYAN"
-                                                    }
-                                                )
-                                            }
-                                            Text(
-                                                text = when (roleOption) {
-                                                    AdminRole.OWNER -> "Full authority across all 14 modules, Administrator RBAC management, and destructive operations."
-                                                    AdminRole.ADMINISTRATOR -> "Manage URL-only images, categories, users, AdMob configs, OneSignal notifications, and app content."
-                                                    AdminRole.MODERATOR -> "Focused Trust & Safety access: comment moderation, user reports, and read-only analytics."
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = TextSecondary
-                                            )
-                                        }
-                                        if (isSelected) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = "Selected Role",
-                                                tint = ChampagneLight
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                val cleanEmail = adminEmail.trim().ifEmpty { "sfforhadvai@gmail.com" }
-                                val uid = "adm_${cleanEmail.lowercase().hashCode().toUInt()}"
-                                onAuthenticated(
-                                    uid,
-                                    cleanEmail,
-                                    adminName.trim().ifEmpty { "System Owner" },
-                                    selectedRole,
-                                    "Enterprise RBAC Console"
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp)
-                                .testTag("enter_admin_console_button"),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = VioletPrimary,
                                 contentColor = TextPrimary
                             ),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(14.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AdminPanelSettings,
-                                contentDescription = "Launch Admin Dashboard"
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Launch Enterprise Administrator Console",
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            if (isGoogleLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp,
+                                    color = TextPrimary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.VerifiedUser,
+                                    contentDescription = "Sign in with Google",
+                                    tint = ChampagneLight,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Sign in with Google",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TextPrimary
+                                )
+                            }
                         }
                     }
                 }
@@ -446,23 +343,33 @@ fun AdminAuthScreen(
     }
 }
 
-private fun launchGoogleCredentialManagerSignIn(
+/**
+ * Resolves the Google Web Client ID (`default_web_client_id`) from `google-services.json` resources,
+ * or falls back to the configured project Web Client ID.
+ */
+private fun resolveWebClientId(context: Context): String {
+    val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+    if (resId != 0) {
+        val fromRes = runCatching { context.getString(resId) }.getOrNull()
+        if (!fromRes.isNullOrBlank()) return fromRes
+    }
+    val domainPart = listOf("apps", "googleusercontent", "com").joinToString(".")
+    return "${BuildConfig.FALLBACK_WEB_CLIENT_PREFIX}.$domainPart"
+}
+
+private fun launchGoogleSignInOnly(
     context: Context,
     scope: CoroutineScope,
-    onSuccess: (uid: String, email: String, name: String) -> Unit,
+    onAuthenticatedUser: (FirebaseUser?) -> Unit,
     onError: (String) -> Unit,
     onCancelled: () -> Unit
 ) {
-    val webClientIdRes = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-    val clientId = if (webClientIdRes != 0) {
-        runCatching { context.getString(webClientIdRes) }.getOrNull()
-    } else null
-
-    if (clientId.isNullOrBlank()) {
-        onError("Google Sign-In requires app/google-services.json with a valid OAuth 2.0 Web Client ID. Upload your google-services.json or use the Role-Based Console button below.")
+    if (FirebaseApp.getApps(context).isEmpty()) {
+        onError("Firebase is not initialized yet. Ensure app/google-services.json is placed in app/ for com.farhadvarietiesstore.promptlensadmin.")
         return
     }
 
+    val clientId = resolveWebClientId(context)
     val credentialManager = CredentialManager.create(context)
     val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
     val request = GetCredentialRequest.Builder()
@@ -479,15 +386,23 @@ private fun launchGoogleCredentialManagerSignIn(
             val cred = credentialManager.getCredential(activity, request).credential
             if (cred is CustomCredential && cred.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val token = GoogleIdTokenCredential.createFrom(cred.data).idToken
-                val authResult = FirebaseAuth.getInstance()
+                val auth = FirebaseAuth.getInstance()
+                val authResult = auth
                     .signInWithCredential(GoogleAuthProvider.getCredential(token, null))
                     .await()
                 val user = authResult.user
-                onSuccess(
-                    user?.uid ?: "adm_google",
-                    user?.email ?: "admin@promptvault.app",
-                    user?.displayName ?: "Google Administrator"
-                )
+                if (!AdminViewModel.isAuthorizedFirebaseUser(user)) {
+                    withContext(NonCancellable) {
+                        try {
+                            credentialManager.clearCredentialState(ClearCredentialStateRequest())
+                        } catch (_: Exception) {
+                        }
+                        auth.signOut()
+                    }
+                    onError("Access denied")
+                } else {
+                    onAuthenticatedUser(user)
+                }
             } else {
                 onError("Unexpected credential type returned.")
             }
@@ -496,7 +411,7 @@ private fun launchGoogleCredentialManagerSignIn(
             onCancelled()
         } catch (e: Exception) {
             Log.e("Auth", "Google Sign-In failed", e)
-            onError(e.localizedMessage ?: "Google Sign-In failed. Verify SHA-1 in Firebase Console.")
+            onError(e.localizedMessage ?: "Google Sign-In failed")
         }
     }
 }

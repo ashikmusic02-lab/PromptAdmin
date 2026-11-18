@@ -13,13 +13,23 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.promptadmin.vqxkrm"
+    applicationId = "com.farhadvarietiesstore.promptlensadmin"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    buildConfigField(
+      "String",
+      "FALLBACK_WEB_CLIENT_PREFIX",
+      "\"737068256742-8pfphc0v7v9irpd305g0kqfq1gto3sp7\""
+    )
+    buildConfigField(
+      "String",
+      "FIREBASE_PROJECT_ID",
+      "\"aajekbo\""
+    )
   }
 
   // Do not remove or modify these signingConfigs. They are necessary for building, installing,
