@@ -1,0 +1,92 @@
+{
+  "project_info": {
+    "project_number": "737068256742",
+    "project_id": "aajekbo",
+    "storage_bucket": "aajekbo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:737068256742:android:6bc47b260bbae89a88da27",
+        "android_client_info": {
+          "package_name": "com.farhadvarietiesstore.promptlens"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "737068256742-cqdi4n5fc14c8r3b73mcl0aq5t3bq752.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.farhadvarietiesstore.promptlens",
+            "certificate_hash": "768e26639cdd6836e5468aa41945c2df5914e145"
+          }
+        },
+        {
+          "client_id": "737068256742-t3f9brn059tn33g1er8q5gpe594mkn7s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.farhadvarietiesstore.promptlens",
+            "certificate_hash": "d56a6598d9040d2c2f50ce3bf5ad8a5c07e8dab6"
+          }
+        },
+        {
+          "client_id": "737068256742-8pfphc0v7v9irpd305g0kqfq1gto3sp7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAKkh_2hiIqqg6kk7-3ut-QQYdByvjyco8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "737068256742-8pfphc0v7v9irpd305g0kqfq1gto3sp7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:737068256742:android:395c7baf405cb5cf88da27",
+        "android_client_info": {
+          "package_name": "com.farhadvarietiesstore.promptlensadmin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "737068256742-gdlrgv6qc41jbhlruuhj27rmim3c0o6b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.farhadvarietiesstore.promptlensadmin",
+            "certificate_hash": "d56a6598d9040d2c2f50ce3bf5ad8a5c07e8dab6"
+          }
+        },
+        {
+          "client_id": "737068256742-8pfphc0v7v9irpd305g0kqfq1gto3sp7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAKkh_2hiIqqg6kk7-3ut-QQYdByvjyco8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "737068256742-8pfphc0v7v9irpd305g0kqfq1gto3sp7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
