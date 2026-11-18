@@ -1,0 +1,13 @@
+{
+  "name": "promptadmin-privileged-functions",
+  "version": "1.0.0",
+  "description": "Privileged server-side Firebase Cloud Functions for OneSignal Push Notification dispatch and Firebase Auth account administration.",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.1.0"
+  }
+}

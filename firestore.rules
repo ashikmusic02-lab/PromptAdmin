@@ -1,0 +1,167 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // HELPER FUNCTIONS: AUTHENTICATION & ROLE-BASED ACCESS CONTROL (RBAC)
+    // =========================================================================
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function adminDoc() {
+      return get(/databases/$(database)/documents/adminUsers/$(request.auth.uid));
+    }
+
+    function isActiveAdmin() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid))
+        && adminDoc().data.active == true;
+    }
+
+    function hasRole(allowedRoles) {
+      return isActiveAdmin() && (adminDoc().data.role in allowedRoles);
+    }
+
+    function isOwner() {
+      return hasRole(['OWNER']);
+    }
+
+    function isAdminOrOwner() {
+      return hasRole(['OWNER', 'ADMINISTRATOR']);
+    }
+
+    function isStaff() {
+      return hasRole(['OWNER', 'ADMINISTRATOR', 'MODERATOR']);
+    }
+
+    function isValidDirectImageUrl(url) {
+      return url is string
+        && url.size() >= 12
+        && url.size() <= 2048
+        && url.matches('^https?://.*');
+    }
+
+    // =========================================================================
+    // 1. IMAGES COLLECTION (Direct External URLs Only — No Storage Uploads)
+    // =========================================================================
+    match /images/{imageId} {
+      // Public user app reads only PUBLISHED images; Admins read all (including DRAFT)
+      allow read: if (resource.data.status == 'PUBLISHED') || isStaff();
+      allow create, update: if isAdminOrOwner()
+        && isValidDirectImageUrl(request.resource.data.imageUrl)
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 160
+        && request.resource.data.shortName is string
+        && request.resource.data.prompt is string
+        && request.resource.data.prompt.size() > 0
+        && request.resource.data.status in ['PUBLISHED', 'DRAFT']
+        && request.resource.data.deepLink is string;
+      allow delete: if isAdminOrOwner();
+    }
+
+    // =========================================================================
+    // 2. CATEGORIES COLLECTION
+    // =========================================================================
+    match /categories/{categoryId} {
+      allow read: if (resource.data.active == true) || isStaff();
+      allow create, update: if isAdminOrOwner()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && isValidDirectImageUrl(request.resource.data.thumbnailUrl);
+      allow delete: if isAdminOrOwner();
+    }
+
+    // =========================================================================
+    // 3. USERS COLLECTION
+    // =========================================================================
+    match /users/{userId} {
+      allow read: if isStaff() || (isAuthenticated() && request.auth.uid == userId);
+      allow create: if (isAuthenticated() && request.auth.uid == userId) || isAdminOrOwner();
+      allow update: if isAdminOrOwner() || (isAuthenticated() && request.auth.uid == userId);
+      allow delete: if isOwner();
+    }
+
+    // =========================================================================
+    // 4. COMMENTS COLLECTION (Synchronized Moderation)
+    // =========================================================================
+    match /comments/{commentId} {
+      allow read: if (resource.data.moderationStatus == 'APPROVED') || isStaff() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.content.size() <= 1000;
+      // Moderators, Administrators, and Owners can approve, hide, restore, or reply
+      allow update, delete: if isStaff();
+    }
+
+    // =========================================================================
+    // 5. LIKES, FAVORITES, PROMPT UNLOCKS & REPORTS
+    // =========================================================================
+    match /likes/{likeId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAuthenticated() && request.resource.data.userId == request.auth.uid || isAdminOrOwner();
+    }
+
+    match /favorites/{favoriteId} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create, delete: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /promptUnlocks/{unlockId} {
+      allow read: if isStaff() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid || isAdminOrOwner();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isStaff();
+      allow create: if isAuthenticated();
+      allow update, delete: if isStaff();
+    }
+
+    // =========================================================================
+    // 6. GOOGLE ADMOB SETTINGS & APP CONTENT SETTINGS
+    // =========================================================================
+    match /advertisementSettings/{configId} {
+      // User app reads AdMob unit IDs & placement switches; only Admin/Owner writes
+      allow read: if true;
+      allow write: if isAdminOrOwner();
+    }
+
+    match /appSettings/{settingId} {
+      allow read: if true;
+      allow write: if isAdminOrOwner();
+    }
+
+    // =========================================================================
+    // 7. ONESIGNAL NOTIFICATIONS & NOTIFICATION HISTORY
+    // =========================================================================
+    match /notifications/{notificationId} {
+      allow read: if isStaff();
+      allow create, update: if isAdminOrOwner()
+        && request.resource.data.title is string
+        && request.resource.data.message is string
+        && request.resource.data.deepLink is string;
+      allow delete: if isOwner();
+    }
+
+    // =========================================================================
+    // 8. ADMINISTRATOR ACCOUNTS & ACTIVITY LOGS
+    // =========================================================================
+    match /adminUsers/{adminId} {
+      allow read: if isStaff() || (isAuthenticated() && request.auth.uid == adminId);
+      // Bootstrap: allow first owner registration or Owner role management
+      allow create, update, delete: if isOwner()
+        || (isAuthenticated() && request.auth.uid == adminId && !exists(/databases/$(database)/documents/adminUsers/$(adminId)));
+    }
+
+    match /adminActivityLogs/{logId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if false; // Immutable audit log
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "PromptAdmin",
+  "description": "Enterprise administrator control panel for managing an AI Photo Inspiration & Prompt Library platform with Firestore, AdMob, OneSignal, and role-based access.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

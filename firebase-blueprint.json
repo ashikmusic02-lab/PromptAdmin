@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "PromptImage": {
+      "title": "PromptImage",
+      "description": "AI Photo Inspiration & Prompt Library item managed strictly via direct external image URL.",
+      "type": "object",
+      "properties": {
+        "imageUrl": { "type": "string", "description": "Direct external image URL (.jpg, .jpeg, .png, .webp)" },
+        "shortName": { "type": "string", "description": "Image short identifier slug" },
+        "title": { "type": "string", "description": "Display title of the inspiration image" },
+        "description": { "type": "string", "description": "Detailed description and style notes" },
+        "categoryId": { "type": "string", "description": "Foreign key to categories collection" },
+        "categoryName": { "type": "string", "description": "Denormalized category name" },
+        "prompt": { "type": "string", "description": "Full AI image generation prompt" },
+        "featured": { "type": "boolean", "description": "Whether highlighted in Featured carousel" },
+        "trending": { "type": "boolean", "description": "Whether highlighted in Trending section" },
+        "status": { "type": "string", "enum": ["PUBLISHED", "DRAFT"], "description": "Publication state" },
+        "displayOrder": { "type": "integer", "description": "Numeric sort priority" },
+        "deepLink": { "type": "string", "description": "Auto-generated internal app destination (e.g., promptvault://image/{id})" },
+        "viewsCount": { "type": "integer", "description": "Total image detail views" },
+        "uniqueViewsCount": { "type": "integer", "description": "Unique authenticated user views" },
+        "likesCount": { "type": "integer", "description": "Total likes count" },
+        "commentsCount": { "type": "integer", "description": "Total visible comments count" },
+        "promptUnlocksCount": { "type": "integer", "description": "Total successful prompt unlocks via rewarded ad or direct unlock" },
+        "sharesCount": { "type": "integer", "description": "Total share events" },
+        "createdByUid": { "type": "string", "description": "Admin UID who created the record" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["imageUrl", "shortName", "title", "categoryId", "prompt", "status", "displayOrder", "deepLink"]
+    },
+    "PromptCategory": {
+      "title": "PromptCategory",
+      "description": "Category for organizing AI photo prompts using direct external thumbnail URLs.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "displayOrder": { "type": "integer" },
+        "active": { "type": "boolean" },
+        "imageCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "thumbnailUrl", "displayOrder", "active"]
+    },
+    "AppUserRecord": {
+      "title": "AppUserRecord",
+      "description": "Registered user of the separate Android User Application.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "accountStatus": { "type": "string", "enum": ["ACTIVE", "DISABLED", "FLAGGED"] },
+        "likesCount": { "type": "integer" },
+        "commentsCount": { "type": "integer" },
+        "unlocksCount": { "type": "integer" },
+        "reportedCount": { "type": "integer" },
+        "registeredAt": { "type": "string", "format": "date-time" },
+        "lastActivityAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "accountStatus"]
+    },
+    "ImageComment": {
+      "title": "ImageComment",
+      "description": "User comment on an image, synchronized with comment moderation controls.",
+      "type": "object",
+      "properties": {
+        "imageId": { "type": "string" },
+        "imageTitle": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "content": { "type": "string" },
+        "moderationStatus": { "type": "string", "enum": ["APPROVED", "PENDING", "HIDDEN", "DELETED"] },
+        "reported": { "type": "boolean" },
+        "reportReason": { "type": "string" },
+        "adminReply": { "type": "string" },
+        "moderatedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["imageId", "userId", "username", "content", "moderationStatus"]
+    },
+    "AdvertisementConfig": {
+      "title": "AdvertisementConfig",
+      "description": "Google AdMob configuration synchronized with the user application.",
+      "type": "object",
+      "properties": {
+        "admobAppId": { "type": "string" },
+        "bannerAdUnitId": { "type": "string" },
+        "rewardedAdUnitId": { "type": "string" },
+        "interstitialAdUnitId": { "type": "string" },
+        "testModeEnabled": { "type": "boolean" },
+        "globalAdsEnabled": { "type": "boolean" },
+        "homeBannerEnabled": { "type": "boolean" },
+        "detailBannerEnabled": { "type": "boolean" },
+        "rewardedAdsEnabled": { "type": "boolean" },
+        "interstitialAdsEnabled": { "type": "boolean" },
+        "interstitialFrequencyActions": { "type": "integer" },
+        "minInterstitialIntervalSeconds": { "type": "integer" },
+        "placementStrategy": { "type": "string" },
+        "rewardPolicy": { "type": "string" },
+        "fallbackBehavior": { "type": "string" },
+        "updatedByUid": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["admobAppId", "globalAdsEnabled", "testModeEnabled"]
+    },
+    "PushNotificationRecord": {
+      "title": "PushNotificationRecord",
+      "description": "OneSignal push notification record with automatic deep link generation.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "targetAudience": { "type": "string", "enum": ["ALL_SUBSCRIBED", "ACTIVE_USERS", "HIGH_ENGAGEMENT", "NEW_USERS"] },
+        "imageId": { "type": "string" },
+        "imageTitle": { "type": "string" },
+        "imageThumbnailUrl": { "type": "string" },
+        "deepLink": { "type": "string" },
+        "scheduleType": { "type": "string", "enum": ["SEND_NOW", "SCHEDULE_LATER"] },
+        "scheduledAt": { "type": "string" },
+        "sendingStatus": { "type": "string", "enum": ["QUEUED_FOR_SERVER", "SCHEDULED", "DISPATCHED_PROVIDER_CONFIRMED", "FAILED"] },
+        "deliveryDetails": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "targetAudience", "deepLink", "sendingStatus"]
+    }
+  },
+  "firestore": {
+    "/images/{imageId}": { "schema": { "$ref": "#/entities/PromptImage" }, "description": "Prompt library images (URL-only)" },
+    "/categories/{categoryId}": { "schema": { "$ref": "#/entities/PromptCategory" }, "description": "Image categories" },
+    "/users/{userId}": { "schema": { "$ref": "#/entities/AppUserRecord" }, "description": "User application accounts" },
+    "/comments/{commentId}": { "schema": { "$ref": "#/entities/ImageComment" }, "description": "Moderated user comments" },
+    "/advertisementSettings/{configId}": { "schema": { "$ref": "#/entities/AdvertisementConfig" }, "description": "AdMob settings" },
+    "/notifications/{notificationId}": { "schema": { "$ref": "#/entities/PushNotificationRecord" }, "description": "OneSignal notification history" }
+  }
+}
