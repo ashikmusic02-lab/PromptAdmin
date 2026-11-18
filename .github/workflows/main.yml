@@ -19,16 +19,8 @@ jobs:
         with:
           gradle-version: 9.3.1
 
-      - name: Add google-services.json
-        env:
-          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: |
-          if echo "$GSJ" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
-            printf '%s' "$GSJ" > app/google-services.json
-          else
-            echo "$GSJ" | base64 -d > app/google-services.json
-          fi
-          python3 -c "import json; json.load(open('app/google-services.json')); print('google-services.json OK')"
+      - name: Check google-services.json
+        run: test -f app/google-services.json && echo "found"
 
       - name: Build
         run: gradle assembleDebug
