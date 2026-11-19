@@ -6,67 +6,66 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.AdsClick
-import androidx.compose.material.icons.filled.Analytics
-import androidx.compose.material.icons.filled.AppSettingsAlt
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Comment
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -74,40 +73,35 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.model.AdminRole
 import com.example.model.AdminSection
+import com.example.model.AuthUiState
+import com.example.ui.components.DestructiveConfirmationDialog
 import com.example.ui.components.StatusPill
 import com.example.ui.screens.AdminAuthScreen
-import com.example.ui.screens.AdministratorManagementScreen
-import com.example.ui.screens.AdvertisementManagementScreen
-import com.example.ui.screens.AnalyticsComparisonScreen
-import com.example.ui.screens.AppContentManagementScreen
-import com.example.ui.screens.CategoryManagementScreen
-import com.example.ui.screens.CommentModerationScreen
-import com.example.ui.screens.DashboardOverviewScreen
-import com.example.ui.screens.ImageManagementScreen
-import com.example.ui.screens.LikesAndEngagementScreen
-import com.example.ui.screens.NotificationHistoryScreen
-import com.example.ui.screens.OneSignalNotificationScreen
-import com.example.ui.screens.PlatformSettingsScreen
-import com.example.ui.screens.SecurityActivityLogsScreen
-import com.example.ui.screens.UserManagementScreen
-import com.example.ui.theme.ChampagneGold
-import com.example.ui.theme.ChampagneLight
+import com.example.ui.screens.AdsSettingsScreen
+import com.example.ui.screens.AppSettingsScreen
+import com.example.ui.screens.CategoriesScreen
+import com.example.ui.screens.CommentsAndReportsScreen
+import com.example.ui.screens.DashboardScreen
+import com.example.ui.screens.FullScreenImageForm
+import com.example.ui.screens.ImagesScreen
+import com.example.ui.screens.NotAdminScreen
+import com.example.ui.screens.NotificationHelperScreen
+import com.example.ui.screens.SplashLoadingScreen
 import com.example.ui.theme.CharcoalSurface
 import com.example.ui.theme.GraphiteBorder
-import com.example.ui.theme.GraphiteCard
-import com.example.ui.theme.GraphiteElevated
 import com.example.ui.theme.ObsidianBg
 import com.example.ui.theme.PromptAdminTheme
 import com.example.ui.theme.StatusEmerald
+import com.example.ui.theme.StatusEmeraldBg
 import com.example.ui.theme.StatusRose
-import com.example.ui.theme.TextMuted
+import com.example.ui.theme.StatusRoseBg
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.VioletBright
 import com.example.ui.theme.VioletContainer
 import com.example.ui.theme.VioletPrimary
-import com.example.viewmodel.AdminSession
 import com.example.viewmodel.AdminViewModel
 import kotlinx.coroutines.launch
 
@@ -123,579 +117,507 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable
-fun PromptAdminRootApp(
-    adminViewModel: AdminViewModel = viewModel()
-) {
-    val session by adminViewModel.session.collectAsStateWithLifecycle()
-    val currentSection by adminViewModel.currentSection.collectAsStateWithLifecycle()
-    val connectionStatus by adminViewModel.connectionStatus.collectAsStateWithLifecycle()
-    val stats by adminViewModel.liveStats.collectAsStateWithLifecycle()
-    val analyticsRange by adminViewModel.analyticsRange.collectAsStateWithLifecycle()
-    val imageSortOption by adminViewModel.imageSortOption.collectAsStateWithLifecycle()
-    val images by adminViewModel.images.collectAsStateWithLifecycle()
-    val categories by adminViewModel.categories.collectAsStateWithLifecycle()
-    val users by adminViewModel.users.collectAsStateWithLifecycle()
-    val comments by adminViewModel.comments.collectAsStateWithLifecycle()
-    val adMobSettings by adminViewModel.adMobSettings.collectAsStateWithLifecycle()
-    val appContentSettings by adminViewModel.appContentSettings.collectAsStateWithLifecycle()
-    val notifications by adminViewModel.notifications.collectAsStateWithLifecycle()
-    val adminAccounts by adminViewModel.adminAccounts.collectAsStateWithLifecycle()
-    val activityLogs by adminViewModel.activityLogs.collectAsStateWithLifecycle()
-    val preselectedImage by adminViewModel.preselectedNotificationImage.collectAsStateWithLifecycle()
-    val bannerMessage by adminViewModel.statusBannerMessage.collectAsStateWithLifecycle()
-    val isErrorBanner by adminViewModel.isErrorBanner.collectAsStateWithLifecycle()
-    val isSyncing by adminViewModel.isSyncing.collectAsStateWithLifecycle()
-    val authErrorMessage by adminViewModel.authErrorMessage.collectAsStateWithLifecycle()
+private fun sectionIcon(section: AdminSection): ImageVector {
+    return when (section) {
+        AdminSection.DASHBOARD -> Icons.Default.Dashboard
+        AdminSection.IMAGES -> Icons.Default.Collections
+        AdminSection.CATEGORIES -> Icons.Default.Category
+        AdminSection.COMMENTS_REPORTS -> Icons.Default.Forum
+        AdminSection.NOTIFICATION_HELPER -> Icons.Default.NotificationsActive
+        AdminSection.ADS -> Icons.Default.Campaign
+        AdminSection.SETTINGS -> Icons.Default.Settings
+    }
+}
 
-    Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(ObsidianBg)
-            .windowInsetsPadding(WindowInsets.safeDrawing),
-        color = ObsidianBg
-    ) {
-        if (!session.isAuthenticated) {
+private fun roleTone(role: AdminRole): String {
+    return when (role) {
+        AdminRole.OWNER -> "OWNER"
+        AdminRole.ADMIN -> "ADMIN"
+        AdminRole.MODERATOR -> "MODERATOR"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
+    val authState by viewModel.authState.collectAsStateWithLifecycle()
+    val authErrorMessage by viewModel.authErrorMessage.collectAsStateWithLifecycle()
+    val currentSection by viewModel.currentSection.collectAsStateWithLifecycle()
+    val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
+    val isErrorSnackbar by viewModel.isErrorSnackbar.collectAsStateWithLifecycle()
+
+    val isImageFormOpen by viewModel.isImageFormOpen.collectAsStateWithLifecycle()
+    val editingImage by viewModel.editingImage.collectAsStateWithLifecycle()
+    val loadedPromptText by viewModel.loadedPromptText.collectAsStateWithLifecycle()
+    val isLoadingPrompt by viewModel.isLoadingPrompt.collectAsStateWithLifecycle()
+    val isImageSaving by viewModel.isImageSaving.collectAsStateWithLifecycle()
+    val isActionSubmitting by viewModel.isActionSubmitting.collectAsStateWithLifecycle()
+
+    val dashboardCounts by viewModel.dashboardCounts.collectAsStateWithLifecycle()
+    val images by viewModel.images.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val comments by viewModel.comments.collectAsStateWithLifecycle()
+    val reports by viewModel.reports.collectAsStateWithLifecycle()
+    val adSettings by viewModel.adSettings.collectAsStateWithLifecycle()
+    val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
+    val isLoadingData by viewModel.isLoadingData.collectAsStateWithLifecycle()
+
+    var showSignOutConfirmation by remember { mutableStateOf(false) }
+
+    when (val state = authState) {
+        is AuthUiState.Loading -> {
+            SplashLoadingScreen()
+        }
+        is AuthUiState.Unauthenticated -> {
             AdminAuthScreen(
-                connectionStatus = connectionStatus,
                 externalAuthError = authErrorMessage,
-                onGoogleFirebaseUserAuthenticated = adminViewModel::onGoogleFirebaseUserAuthenticated,
-                onSetAuthError = adminViewModel::setAuthErrorMessage
+                onGoogleFirebaseUserAuthenticated = { firebaseUser ->
+                    viewModel.onGoogleFirebaseUserAuthenticated(firebaseUser)
+                },
+                onSetAuthError = { err ->
+                    viewModel.setAuthErrorMessage(err)
+                }
             )
-        } else {
-            // BackHandler returns from any secondary module to Dashboard Overview
-            BackHandler(enabled = currentSection != AdminSection.DASHBOARD) {
-                adminViewModel.navigateTo(AdminSection.DASHBOARD)
+        }
+        is AuthUiState.NotAdmin -> {
+            NotAdminScreen(
+                uid = state.uid,
+                email = state.email,
+                message = state.message,
+                onRetryVerification = { viewModel.retryAdminVerification() },
+                onSignOutClick = { showSignOutConfirmation = true }
+            )
+        }
+        is AuthUiState.Authorized -> {
+            val allowedSections = remember(state.role) {
+                AdminSection.entries.filter { state.role.canAccessSection(it) }
             }
 
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val isWideScreen = maxWidth >= 760.dp
+            if (isImageFormOpen) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    FullScreenImageForm(
+                        editingImage = editingImage,
+                        loadedPromptText = loadedPromptText,
+                        isLoadingPrompt = isLoadingPrompt,
+                        isSaving = isImageSaving,
+                        categories = categories,
+                        onClose = { viewModel.closeImageForm() },
+                        onSave = { rawUrl, title, desc, catId, catName, prompt, featured, trending, status, ratio, previewLoaded ->
+                            viewModel.saveImageFromForm(
+                                rawImageUrl = rawUrl,
+                                title = title,
+                                description = desc,
+                                selectedCategoryId = catId,
+                                selectedCategoryName = catName,
+                                promptText = prompt,
+                                featured = featured,
+                                trending = trending,
+                                status = status,
+                                measuredAspectRatio = ratio,
+                                isImagePreviewLoaded = previewLoaded
+                            )
+                        },
+                        onShowMessage = { msg ->
+                            viewModel.showMessage(msg, isError = false)
+                        }
+                    )
+
+                    if (snackbarMessage != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(16.dp)
+                        ) {
+                            BanglaFeedbackBanner(
+                                message = snackbarMessage ?: "",
+                                isError = isErrorSnackbar,
+                                onDismiss = { viewModel.dismissMessage() }
+                            )
+                        }
+                    }
+                }
+            } else {
                 val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
                 val scope = rememberCoroutineScope()
 
-                val mainWorkspace: @Composable () -> Unit = {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Top Enterprise Command Bar
-                        TopEnterpriseHeaderBar(
-                            currentSection = currentSection,
-                            session = session,
-                            showMenuButton = !isWideScreen,
-                            onOpenDrawer = { scope.launch { drawerState.open() } },
-                            onSignOut = { adminViewModel.signOutAdmin() }
-                        )
+                BackHandler(
+                    enabled = state.role != AdminRole.MODERATOR && currentSection != AdminSection.DASHBOARD
+                ) {
+                    viewModel.navigateTo(AdminSection.DASHBOARD)
+                }
 
-                        // Always-visible 14-Module Quick Switcher Strip for effortless navigation on mobile & tablet
-                        QuickModuleNavigationStrip(
-                            currentSection = currentSection,
-                            onSelectSection = { adminViewModel.navigateTo(it) }
-                        )
-
-                        // Toast / Feedback Status Banner
-                        AnimatedVisibility(
-                            visible = bannerMessage != null,
-                            enter = fadeIn(),
-                            exit = fadeOut()
+                ModalNavigationDrawer(
+                    drawerState = drawerState,
+                    drawerContent = {
+                        ModalDrawerSheet(
+                            drawerContainerColor = CharcoalSurface,
+                            drawerContentColor = TextPrimary
                         ) {
-                            bannerMessage?.let { msg ->
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                                    color = if (isErrorBanner) StatusRose.copy(alpha = 0.18f) else StatusEmerald.copy(alpha = 0.18f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (isErrorBanner) StatusRose else StatusEmerald
-                                    )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
+                                    Text(
+                                        text = "PromptAdmin",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    StatusPill(
+                                        label = state.role.banglaBadge,
+                                        tone = roleTone(state.role)
+                                    )
+                                }
+                                if (state.email.isNotBlank()) {
+                                    Text(
+                                        text = state.email,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(color = GraphiteBorder)
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            allowedSections.forEach { section ->
+                                val selected = currentSection == section
+                                NavigationDrawerItem(
+                                    label = {
                                         Text(
-                                            text = msg,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextPrimary,
-                                            modifier = Modifier.weight(1f)
+                                            text = section.titleBangla,
+                                            style = MaterialTheme.typography.titleMedium
                                         )
-                                        IconButton(
-                                            onClick = { adminViewModel.dismissFeedback() },
-                                            modifier = Modifier.size(28.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Dismiss notification",
-                                                tint = TextPrimary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
+                                    },
+                                    selected = selected,
+                                    onClick = {
+                                        viewModel.navigateTo(section)
+                                        scope.launch { drawerState.close() }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = sectionIcon(section),
+                                            contentDescription = section.titleBangla
+                                        )
+                                    },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = VioletContainer,
+                                        selectedIconColor = VioletBright,
+                                        selectedTextColor = TextPrimary,
+                                        unselectedIconColor = TextSecondary,
+                                        unselectedTextColor = TextSecondary
+                                    ),
+                                    modifier = Modifier
+                                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                                        .testTag("drawer_nav_${section.name.lowercase()}")
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.weight(1f))
+                            HorizontalDivider(color = GraphiteBorder)
+
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch { drawerState.close() }
+                                    showSignOutConfirmation = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("drawer_sign_out_button"),
+                                border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = "লগ আউট",
+                                    tint = StatusRose,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "লগ আউট",
+                                    color = StatusRose,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                    }
+                ) {
+                    Scaffold(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(ObsidianBg),
+                        containerColor = ObsidianBg,
+                        contentWindowInsets = WindowInsets.safeDrawing,
+                        topBar = {
+                            TopAppBar(
+                                title = {
+                                    Text(
+                                        text = currentSection.titleBangla,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                navigationIcon = {
+                                    IconButton(
+                                        onClick = { scope.launch { drawerState.open() } },
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .testTag("open_drawer_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Menu,
+                                            contentDescription = "মেনু",
+                                            tint = TextPrimary
+                                        )
+                                    }
+                                },
+                                actions = {
+                                    StatusPill(
+                                        label = state.role.banglaBadge,
+                                        tone = roleTone(state.role)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    IconButton(
+                                        onClick = { showSignOutConfirmation = true },
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .testTag("top_bar_sign_out_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.Logout,
+                                            contentDescription = "লগ আউট",
+                                            tint = StatusRose
+                                        )
+                                    }
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = CharcoalSurface,
+                                    titleContentColor = TextPrimary
+                                )
+                            )
+                        },
+                        bottomBar = {
+                            if (state.role != AdminRole.MODERATOR) {
+                                val bottomItems = listOf(
+                                    AdminSection.DASHBOARD,
+                                    AdminSection.IMAGES,
+                                    AdminSection.CATEGORIES,
+                                    AdminSection.COMMENTS_REPORTS
+                                )
+                                NavigationBar(
+                                    containerColor = CharcoalSurface,
+                                    contentColor = TextPrimary
+                                ) {
+                                    bottomItems.forEach { section ->
+                                        NavigationBarItem(
+                                            selected = currentSection == section,
+                                            onClick = { viewModel.navigateTo(section) },
+                                            icon = {
+                                                Icon(
+                                                    imageVector = sectionIcon(section),
+                                                    contentDescription = section.titleBangla
+                                                )
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = section.titleBangla,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = VioletBright,
+                                                selectedTextColor = TextPrimary,
+                                                indicatorColor = VioletContainer,
+                                                unselectedIconColor = TextSecondary,
+                                                unselectedTextColor = TextSecondary
+                                            ),
+                                            modifier = Modifier.testTag("bottom_nav_${section.name.lowercase()}")
+                                        )
                                     }
                                 }
                             }
                         }
+                    ) { innerPadding ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding)
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            AnimatedVisibility(visible = snackbarMessage != null) {
+                                snackbarMessage?.let { msg ->
+                                    BanglaFeedbackBanner(
+                                        message = msg,
+                                        isError = isErrorSnackbar,
+                                        onDismiss = { viewModel.dismissMessage() }
+                                    )
+                                }
+                            }
 
-                        // Active Module Screen Content
-                        Box(modifier = Modifier.weight(1f)) {
                             when (currentSection) {
-                                AdminSection.DASHBOARD -> DashboardOverviewScreen(
-                                    stats = stats,
-                                    selectedRange = analyticsRange,
-                                    onSelectRange = adminViewModel::setAnalyticsRange,
-                                    images = images,
-                                    adMobSettings = adMobSettings,
-                                    recentLogs = activityLogs,
-                                    connectionStatus = connectionStatus,
-                                    onNavigateTo = adminViewModel::navigateTo,
-                                    onSyncFirestore = adminViewModel::triggerFirestoreFullSync
-                                )
-                                AdminSection.IMAGE_MANAGEMENT -> ImageManagementScreen(
-                                    images = images,
-                                    categories = categories,
-                                    deepLinkScheme = appContentSettings.deepLinkScheme,
-                                    activeRole = session.role,
-                                    onSaveImage = adminViewModel::saveImageRecord,
-                                    onToggleQuickFlag = { img, pub, feat, trend ->
-                                        adminViewModel.toggleImageQuickFlag(img, pub, feat, trend)
-                                    },
-                                    onDeleteImage = adminViewModel::deleteImageConfirmed,
-                                    onSendPushForImage = adminViewModel::openNotificationComposerForImage,
-                                    onNavigateToCategories = {
-                                        adminViewModel.navigateTo(AdminSection.CATEGORIES)
-                                    }
-                                )
-                                AdminSection.CATEGORIES -> CategoryManagementScreen(
-                                    categories = categories,
-                                    images = images,
-                                    activeRole = session.role,
-                                    onSaveCategory = adminViewModel::saveCategoryRecord,
-                                    onDeleteCategoryProtected = adminViewModel::deleteCategoryProtected
-                                )
-                                AdminSection.USER_MANAGEMENT -> UserManagementScreen(
-                                    users = users,
-                                    comments = comments,
-                                    activeRole = session.role,
-                                    onUpsertUser = adminViewModel::registerOrUpdateUser
-                                )
-                                AdminSection.COMMENT_MODERATION -> CommentModerationScreen(
-                                    comments = comments,
-                                    images = images,
-                                    activeRole = session.role,
-                                    onModerateComment = adminViewModel::moderateComment,
-                                    onDeleteCommentPermanently = adminViewModel::deleteCommentPermanently,
-                                    onCreateCommentEntry = adminViewModel::createAdminCommentEntry
-                                )
-                                AdminSection.LIKES_ENGAGEMENT -> LikesAndEngagementScreen(
-                                    images = images,
-                                    canEditTelemetry = session.role.canManageImages,
-                                    onUpdateTelemetry = adminViewModel::updateImageTelemetryCounters
-                                )
-                                AdminSection.ANALYTICS -> AnalyticsComparisonScreen(
-                                    images = images,
-                                    categories = categories,
-                                    selectedSort = imageSortOption,
-                                    onSelectSort = adminViewModel::setImageSortOption,
-                                    selectedRange = analyticsRange,
-                                    onSelectRange = adminViewModel::setAnalyticsRange
-                                )
-                                AdminSection.ADVERTISEMENT_MANAGEMENT -> AdvertisementManagementScreen(
-                                    adMobSettings = adMobSettings,
-                                    activeRole = session.role,
-                                    onSaveAdMobSettings = adminViewModel::updateAdMobConfiguration
-                                )
-                                AdminSection.ONESIGNAL_NOTIFICATIONS -> OneSignalNotificationScreen(
-                                    publishedImages = images.filter { it.status == "PUBLISHED" },
-                                    preselectedImage = preselectedImage,
-                                    deepLinkScheme = appContentSettings.deepLinkScheme,
-                                    oneSignalAppId = appContentSettings.oneSignalAppId,
-                                    oneSignalFunctionUrl = appContentSettings.oneSignalFunctionUrl,
-                                    activeRole = session.role,
-                                    onSendOrSchedule = { title, msg, aud, img, dl, schedType, schedTime, done ->
-                                        adminViewModel.sendOrScheduleNotification(
-                                            title, msg, aud, img, dl, schedType, schedTime
-                                        ) {
-                                            adminViewModel.clearPreselectedNotificationImage()
-                                            done()
+                                AdminSection.DASHBOARD -> {
+                                    DashboardScreen(
+                                        counts = dashboardCounts,
+                                        onNavigate = { viewModel.navigateTo(it) },
+                                        onAddNewImage = { viewModel.openNewImageForm() }
+                                    )
+                                }
+                                AdminSection.IMAGES -> {
+                                    ImagesScreen(
+                                        images = images,
+                                        categories = categories,
+                                        isLoading = isLoadingData,
+                                        isSubmitting = isActionSubmitting,
+                                        onOpenNewImageForm = { viewModel.openNewImageForm() },
+                                        onOpenEditImageForm = { img -> viewModel.openEditImageForm(img) },
+                                        onDeleteImage = { img -> viewModel.deleteImageConfirmed(img) },
+                                        onMoveImageOrder = { img, up -> viewModel.moveImageOrder(img, up) }
+                                    )
+                                }
+                                AdminSection.CATEGORIES -> {
+                                    CategoriesScreen(
+                                        categories = categories,
+                                        isSubmitting = isActionSubmitting,
+                                        onSaveCategory = { existing, name, active, onDone ->
+                                            viewModel.saveCategory(existing, name, active, onDone)
+                                        },
+                                        onDeleteCategory = { cat ->
+                                            viewModel.deleteCategoryConfirmed(cat)
                                         }
-                                    },
-                                    onNavigateToHistory = {
-                                        adminViewModel.navigateTo(AdminSection.NOTIFICATION_HISTORY)
-                                    }
-                                )
-                                AdminSection.NOTIFICATION_HISTORY -> NotificationHistoryScreen(
-                                    notifications = notifications
-                                )
-                                AdminSection.APP_CONTENT -> AppContentManagementScreen(
-                                    settings = appContentSettings,
-                                    images = images,
-                                    categories = categories,
-                                    activeRole = session.role,
-                                    onSaveSettings = adminViewModel::updateAppContentConfiguration
-                                )
-                                AdminSection.ADMINISTRATOR_MANAGEMENT -> AdministratorManagementScreen(
-                                    adminAccounts = adminAccounts,
-                                    session = session,
-                                    onSaveAdmin = adminViewModel::saveAdministratorAccount,
-                                    onRemoveAdmin = adminViewModel::removeAdministratorAccount,
-                                    onSwitchPreviewRole = adminViewModel::switchActiveRoleForPreview
-                                )
-                                AdminSection.SECURITY_ACTIVITY_LOGS -> SecurityActivityLogsScreen(
-                                    logs = activityLogs
-                                )
-                                AdminSection.SETTINGS -> PlatformSettingsScreen(
-                                    settings = appContentSettings,
-                                    connectionStatus = connectionStatus,
-                                    isSyncing = isSyncing,
-                                    activeRole = session.role,
-                                    onSaveSettings = adminViewModel::updateAppContentConfiguration,
-                                    onTriggerFirestoreSync = adminViewModel::triggerFirestoreFullSync
-                                )
+                                    )
+                                }
+                                AdminSection.COMMENTS_REPORTS -> {
+                                    CommentsAndReportsScreen(
+                                        comments = comments,
+                                        reports = reports,
+                                        isSubmitting = isActionSubmitting,
+                                        onToggleCommentVisibility = { cmt ->
+                                            viewModel.toggleCommentVisibility(cmt)
+                                        },
+                                        onReplyToComment = { cmt, reply, onDone ->
+                                            viewModel.replyToComment(cmt, reply, onDone)
+                                        },
+                                        onDeleteComment = { cmt ->
+                                            viewModel.deleteCommentConfirmed(cmt)
+                                        },
+                                        onUpdateReportStatus = { rpt, st ->
+                                            viewModel.setReportStatus(rpt, st)
+                                        }
+                                    )
+                                }
+                                AdminSection.NOTIFICATION_HELPER -> {
+                                    NotificationHelperScreen(
+                                        images = images,
+                                        onShowMessage = { msg ->
+                                            viewModel.showMessage(msg, isError = false)
+                                        }
+                                    )
+                                }
+                                AdminSection.ADS -> {
+                                    AdsSettingsScreen(
+                                        settings = adSettings,
+                                        isSaving = isActionSubmitting,
+                                        onSave = { updated ->
+                                            viewModel.saveAdSettings(updated)
+                                        }
+                                    )
+                                }
+                                AdminSection.SETTINGS -> {
+                                    AppSettingsScreen(
+                                        settings = appSettings,
+                                        isSaving = isActionSubmitting,
+                                        onSave = { updated ->
+                                            viewModel.saveAppSettings(updated)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
-
-                if (isWideScreen) {
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        EnterpriseSidebarContent(
-                            currentSection = currentSection,
-                            session = session,
-                            onSelectSection = { adminViewModel.navigateTo(it) },
-                            onSignOut = { adminViewModel.signOutAdmin() },
-                            modifier = Modifier
-                                .width(276.dp)
-                                .fillMaxHeight()
-                        )
-                        Box(modifier = Modifier.weight(1f)) {
-                            mainWorkspace()
-                        }
-                    }
-                } else {
-                    ModalNavigationDrawer(
-                        drawerState = drawerState,
-                        drawerContent = {
-                            ModalDrawerSheet(
-                                drawerContainerColor = CharcoalSurface,
-                                modifier = Modifier.width(292.dp)
-                            ) {
-                                EnterpriseSidebarContent(
-                                    currentSection = currentSection,
-                                    session = session,
-                                    onSelectSection = { section ->
-                                        adminViewModel.navigateTo(section)
-                                        scope.launch { drawerState.close() }
-                                    },
-                                    onSignOut = {
-                                        scope.launch { drawerState.close() }
-                                        adminViewModel.signOutAdmin()
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        }
-                    ) {
-                        mainWorkspace()
-                    }
-                }
             }
         }
+    }
+
+    if (showSignOutConfirmation) {
+        DestructiveConfirmationDialog(
+            title = "লগ আউট করবেন?",
+            message = "আপনি কি নিশ্চিতভাবে লগ আউট করতে চান?",
+            confirmButtonText = "লগ আউট",
+            onConfirm = { viewModel.signOutConfirmed() },
+            onDismiss = { showSignOutConfirmation = false }
+        )
     }
 }
 
 @Composable
-private fun QuickModuleNavigationStrip(
-    currentSection: AdminSection,
-    onSelectSection: (AdminSection) -> Unit
+private fun BanglaFeedbackBanner(
+    message: String,
+    isError: Boolean,
+    onDismiss: () -> Unit
 ) {
     Surface(
-        color = ObsidianBg,
-        border = BorderStroke(1.dp, GraphiteBorder),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("feedback_banner"),
+        color = if (isError) StatusRoseBg else StatusEmeraldBg,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(
+            1.dp,
+            if (isError) StatusRose else StatusEmerald
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AdminSection.entries.forEach { section ->
-                val selected = currentSection == section
-                Surface(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onSelectSection(section) }
-                        .testTag("quick_nav_${section.number}"),
-                    color = if (selected) VioletPrimary else GraphiteCard,
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(
-                        1.dp,
-                        if (selected) ChampagneGold else GraphiteBorder
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = iconForSection(section),
-                            contentDescription = section.title,
-                            tint = if (selected) ChampagneLight else TextSecondary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            text = "${section.number}. ${section.title}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) TextPrimary else TextSecondary,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TopEnterpriseHeaderBar(
-    currentSection: AdminSection,
-    session: AdminSession,
-    showMenuButton: Boolean,
-    onOpenDrawer: () -> Unit,
-    onSignOut: () -> Unit
-) {
-    Surface(
-        color = CharcoalSurface,
-        border = BorderStroke(1.dp, GraphiteBorder),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
+                modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                if (showMenuButton) {
-                    IconButton(
-                        onClick = onOpenDrawer,
-                        modifier = Modifier.testTag("open_sidebar_drawer_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Open Navigation Sidebar",
-                            tint = ChampagneLight
-                        )
-                    }
-                }
-                Column {
-                    Text(
-                        text = "${currentSection.number.toString().padStart(2, '0')} • ${currentSection.title}",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "PromptAdmin Control Panel • ${session.email}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatusPill(
-                    label = session.role.displayName.uppercase(),
-                    tone = when (session.role.name) {
-                        "OWNER" -> "GOLD"
-                        "ADMINISTRATOR" -> "VIOLET"
-                        else -> "CYAN"
-                    }
-                )
-                IconButton(
-                    onClick = onSignOut,
-                    modifier = Modifier.testTag("header_sign_out_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Logout,
-                        contentDescription = "Sign Out",
-                        tint = TextSecondary
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EnterpriseSidebarContent(
-    currentSection: AdminSection,
-    session: AdminSession,
-    onSelectSection: (AdminSection) -> Unit,
-    onSignOut: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .background(CharcoalSurface)
-            .border(1.dp, GraphiteBorder)
-            .padding(vertical = 16.dp)
-    ) {
-        // Brand Identity Block
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(VioletContainer)
-                    .border(1.dp, ChampagneGold, RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.AdminPanelSettings,
-                    contentDescription = "PromptAdmin Emblem",
-                    tint = ChampagneLight
-                )
-            }
-            Column {
-                Text(
-                    text = "PROMPTADMIN",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold
+                    imageVector = if (isError) Icons.Default.ErrorOutline else Icons.Default.CheckCircle,
+                    contentDescription = if (isError) "ত্রুটি" else "সফল",
+                    tint = if (isError) StatusRose else StatusEmerald
                 )
                 Text(
-                    text = "ENTERPRISE CMS",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ChampagneLight
+                    text = message,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary
                 )
             }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-        HorizontalDivider(color = GraphiteBorder)
-
-        // All 14 Required Navigation Items
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            AdminSection.entries.forEach { section ->
-                val selected = currentSection == section
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (selected) VioletContainer else CharcoalSurface)
-                        .border(
-                            width = if (selected) 1.dp else 0.dp,
-                            color = if (selected) VioletPrimary else CharcoalSurface,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .clickable { onSelectSection(section) }
-                        .padding(horizontal = 12.dp, vertical = 11.dp)
-                        .testTag("nav_item_${section.number}"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = iconForSection(section),
-                        contentDescription = section.title,
-                        tint = if (selected) ChampagneLight else TextSecondary,
-                        modifier = Modifier.size(19.dp)
-                    )
-                    Text(
-                        text = "${section.number}. ${section.title}",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (selected) TextPrimary else TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (selected) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(ChampagneGold)
-                        )
-                    }
-                }
-            }
-        }
-
-        HorizontalDivider(color = GraphiteBorder)
-
-        // Active Session Footer
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = session.displayName,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = session.role.badgeLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ChampagneLight
-                )
-            }
-            IconButton(onClick = onSignOut) {
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(48.dp)
+            ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Logout,
-                    contentDescription = "Sign Out",
-                    tint = StatusRose
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "বন্ধ করুন",
+                    tint = TextPrimary
                 )
             }
         }
-    }
-}
-
-private fun iconForSection(section: AdminSection): ImageVector {
-    return when (section) {
-        AdminSection.DASHBOARD -> Icons.Default.Dashboard
-        AdminSection.IMAGE_MANAGEMENT -> Icons.Default.Image
-        AdminSection.CATEGORIES -> Icons.Default.Category
-        AdminSection.USER_MANAGEMENT -> Icons.Default.People
-        AdminSection.COMMENT_MODERATION -> Icons.Default.Comment
-        AdminSection.LIKES_ENGAGEMENT -> Icons.Default.Favorite
-        AdminSection.ANALYTICS -> Icons.Default.Analytics
-        AdminSection.ADVERTISEMENT_MANAGEMENT -> Icons.Default.AdsClick
-        AdminSection.ONESIGNAL_NOTIFICATIONS -> Icons.Default.NotificationsActive
-        AdminSection.NOTIFICATION_HISTORY -> Icons.Default.History
-        AdminSection.APP_CONTENT -> Icons.Default.AppSettingsAlt
-        AdminSection.ADMINISTRATOR_MANAGEMENT -> Icons.Default.AdminPanelSettings
-        AdminSection.SECURITY_ACTIVITY_LOGS -> Icons.Default.Security
-        AdminSection.SETTINGS -> Icons.Default.Settings
     }
 }

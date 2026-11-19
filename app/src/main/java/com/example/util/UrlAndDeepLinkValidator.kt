@@ -16,93 +16,132 @@ sealed class UrlValidationResult {
 
 object UrlAndDeepLinkValidator {
 
-    private val SUPPORTED_IMAGE_EXTENSIONS = listOf(".jpg", ".jpeg", ".png", ".webp")
-    private val KNOWN_DIRECT_IMAGE_HOSTS = listOf(
-        "images.unsplash.com",
-        "plus.unsplash.com",
-        "images.pexels.com",
-        "cdn.pixabay.com",
-        "i.imgur.com",
-        "lh3.googleusercontent.com",
-        "res.cloudinary.com"
-    )
+    private val DRIVE_FILE_D_REGEX = Regex("""drive\.google\.com/file/d/([a-zA-Z0-9_-]+)""")
+    private val DRIVE_ID_QUERY_REGEX = Regex("""(?:drive|docs)\.google\.com/(?:open|uc|thumbnail)\?(?:[^#]*&)?id=([a-zA-Z0-9_-]+)""")
 
     /**
-     * Validates a direct external image URL.
-     * Enforces HTTPS/HTTP protocol, valid hostname, and supported direct image format
-     * (.jpg, .jpeg, .png, .webp) or recognized direct image CDN parameter.
+     * Normalizes any public image URL.
+     * If the URL is a Google Drive sharing/view link:
+     * - drive.google.com/file/d/FILE_ID/view...
+     * - drive.google.com/open?id=FILE_ID
+     * - drive.google.com/uc?id=FILE_ID
+     * converts it to: https://drive.google.com/uc?export=view&id=FILE_ID
      */
-    fun validateDirectImageUrl(rawUrl: String): UrlValidationResult {
+    fun normalizePublicImageUrl(rawUrl: String): String {
         val trimmed = rawUrl.trim()
-        if (trimmed.isEmpty()) return UrlValidationResult.Empty
+        if (trimmed.isEmpty()) return ""
 
-        if (!trimmed.startsWith("https://", ignoreCase = true) &&
-            !trimmed.startsWith("http://", ignoreCase = true)
-        ) {
-            return UrlValidationResult.Invalid("URL must start with https:// or http://")
+        DRIVE_FILE_D_REGEX.find(trimmed)?.groupValues?.getOrNull(1)?.let { fileId ->
+            if (fileId.isNotBlank()) {
+                return "https://drive.google.com/uc?export=view&id=$fileId"
+            }
         }
 
-        if (trimmed.contains(" ")) {
-            return UrlValidationResult.Invalid("URL must not contain spaces.")
+        DRIVE_ID_QUERY_REGEX.find(trimmed)?.groupValues?.getOrNull(1)?.let { fileId ->
+            if (fileId.isNotBlank()) {
+                return "https://drive.google.com/uc?export=view&id=$fileId"
+            }
+        }
+
+        return trimmed
+    }
+
+    /**
+     * Validates any public HTTP/HTTPS image URL without restricting by file extension.
+     */
+    fun validatePublicImageUrl(rawUrl: String): UrlValidationResult {
+        val normalized = normalizePublicImageUrl(rawUrl)
+        if (normalized.isEmpty()) return UrlValidationResult.Empty
+
+        if (!normalized.startsWith("https://", ignoreCase = true) &&
+            !normalized.startsWith("http://", ignoreCase = true)
+        ) {
+            return UrlValidationResult.Invalid("লিংকটি https:// অথবা http:// দিয়ে শুরু হতে হবে")
+        }
+
+        if (normalized.contains(" ")) {
+            return UrlValidationResult.Invalid("লিংকের ভেতরে কোনো ফাঁকা স্থান (space) থাকা যাবে না")
         }
 
         val uri = try {
-            URI(trimmed)
-        } catch (e: Exception) {
-            return UrlValidationResult.Invalid("Malformed URL syntax: ${e.localizedMessage ?: "Invalid URI"}")
+            URI(normalized)
+        } catch (_: Exception) {
+            return UrlValidationResult.Invalid("সঠিক ছবির লিংক দিন")
         }
 
         val host = uri.host?.lowercase(Locale.US)
         if (host.isNullOrBlank() || !host.contains(".")) {
-            return UrlValidationResult.Invalid("URL must include a valid domain host.")
+            return UrlValidationResult.Invalid("সঠিক ছবির লিংক দিন")
         }
 
-        if (host.contains("firebasestorage.googleapis.com")) {
-            return UrlValidationResult.Invalid("Firebase Storage uploads are prohibited by policy. Use an external direct image URL.")
-        }
-
-        val pathLower = (uri.path ?: "").lowercase(Locale.US)
-        val queryLower = (uri.query ?: "").lowercase(Locale.US)
-
-        val matchedExt = SUPPORTED_IMAGE_EXTENSIONS.firstOrNull { ext ->
-            pathLower.endsWith(ext) || queryLower.contains("fm=${ext.removePrefix(".")}") ||
-                queryLower.contains("format=${ext.removePrefix(".")}")
-        }
-
-        val isKnownImageCdn = KNOWN_DIRECT_IMAGE_HOSTS.any { host == it || host.endsWith(".$it") }
-
-        return when {
-            matchedExt != null -> {
-                UrlValidationResult.Valid(
-                    normalizedUrl = trimmed,
-                    detectedFormat = matchedExt.removePrefix(".").uppercase(Locale.US),
-                    host = host
-                )
-            }
-            isKnownImageCdn && pathLower.length > 1 -> {
-                val formatGuess = when {
-                    queryLower.contains("webp") -> "WEBP"
-                    queryLower.contains("png") -> "PNG"
-                    else -> "JPG/CDN"
-                }
-                UrlValidationResult.Valid(
-                    normalizedUrl = trimmed,
-                    detectedFormat = formatGuess,
-                    host = host
-                )
-            }
-            else -> {
-                UrlValidationResult.Invalid(
-                    "Direct image link required (.jpg, .jpeg, .png, or .webp). Supplied path does not end with a supported image extension."
-                )
-            }
-        }
+        return UrlValidationResult.Valid(
+            normalizedUrl = normalized,
+            detectedFormat = "IMAGE",
+            host = host
+        )
     }
 
     /**
-     * Generates a deterministic, URL-safe Firestore document ID for a newly created image
-     * so the administrator never needs to invent an ID manually.
+     * Legacy method retained for unit test compatibility.
      */
+    fun validateDirectImageUrl(rawUrl: String): UrlValidationResult {
+        val trimmed = rawUrl.trim()
+        if (trimmed.isEmpty()) return UrlValidationResult.Empty
+        if (!trimmed.startsWith("https://", ignoreCase = true) &&
+            !trimmed.startsWith("http://", ignoreCase = true)
+        ) {
+            return UrlValidationResult.Invalid("Invalid URL scheme")
+        }
+        val uri = try {
+            URI(trimmed)
+        } catch (_: Exception) {
+            return UrlValidationResult.Invalid("Malformed URL")
+        }
+        val host = uri.host?.lowercase(Locale.US) ?: return UrlValidationResult.Invalid("Missing host")
+        if (host.contains("firebasestorage.googleapis.com")) {
+            return UrlValidationResult.Invalid("Firebase Storage URL not allowed")
+        }
+        val pathLower = (uri.path ?: "").lowercase(Locale.US)
+        if (pathLower.endsWith(".html") || pathLower.endsWith(".htm")) {
+            return UrlValidationResult.Invalid("HTML page is not an image")
+        }
+        val ext = when {
+            pathLower.endsWith(".jpg") -> "JPG"
+            pathLower.endsWith(".jpeg") -> "JPEG"
+            pathLower.endsWith(".png") -> "PNG"
+            pathLower.endsWith(".webp") -> "WEBP"
+            else -> "IMAGE"
+        }
+        return UrlValidationResult.Valid(
+            normalizedUrl = normalizePublicImageUrl(trimmed),
+            detectedFormat = ext,
+            host = host
+        )
+    }
+
+    /**
+     * Auto-generates shortName from title (max 80 chars).
+     */
+    fun generateShortNameFromTitle(title: String): String {
+        val cleaned = title.trim()
+            .replace(Regex("\\s+"), " ")
+            .take(80)
+        return cleaned.ifEmpty { "image" }
+    }
+
+    /**
+     * Generates lowercase title words joined by comma (max 500 chars).
+     */
+    fun generateKeywordsFromTitle(title: String): String {
+        val words = title.trim()
+            .lowercase(Locale.ROOT)
+            .split(Regex("[\\s,।;:|/\\\\]+"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+        return words.joinToString(",").take(500)
+    }
+
     fun generateUniqueImageId(shortName: String): String {
         val cleanSlug = shortName
             .lowercase(Locale.US)
@@ -115,16 +154,10 @@ object UrlAndDeepLinkValidator {
     }
 
     /**
-     * Automatically builds the internal application deep link (`scheme://image/IMAGE_ID`)
-     * and verified Android App Link (`https://host/image/IMAGE_ID`).
+     * Builds the internal application deep link (`promptlens://image/{imageId}`).
      */
-    fun buildAutoDeepLink(scheme: String, imageId: String): String {
-        val safeScheme = scheme.trim().lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "promptvault" }
+    fun buildAutoDeepLink(imageId: String, scheme: String = "promptlens"): String {
+        val safeScheme = scheme.trim().lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "").ifEmpty { "promptlens" }
         return "$safeScheme://image/$imageId"
-    }
-
-    fun buildVerifiedAppLink(host: String, imageId: String): String {
-        val safeHost = host.trim().lowercase(Locale.US).removePrefix("https://").removePrefix("http://").trim('/').ifEmpty { "promptvault.app" }
-        return "https://$safeHost/image/$imageId"
     }
 }

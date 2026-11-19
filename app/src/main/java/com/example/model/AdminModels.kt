@@ -3,90 +3,190 @@ package com.example.model
 import androidx.annotation.Keep
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.google.firebase.Timestamp
 
-enum class AdminSection(val number: Int, val title: String, val group: String) {
-    DASHBOARD(1, "Dashboard", "Overview"),
-    IMAGE_MANAGEMENT(2, "Image Management", "Content Library"),
-    CATEGORIES(3, "Categories", "Content Library"),
-    USER_MANAGEMENT(4, "User Management", "Community & Trust"),
-    COMMENT_MODERATION(5, "Comment Moderation", "Community & Trust"),
-    LIKES_ENGAGEMENT(6, "Likes & Engagement", "Intelligence"),
-    ANALYTICS(7, "Analytics", "Intelligence"),
-    ADVERTISEMENT_MANAGEMENT(8, "Advertisement Management", "Monetization & Growth"),
-    ONESIGNAL_NOTIFICATIONS(9, "OneSignal Notifications", "Monetization & Growth"),
-    NOTIFICATION_HISTORY(10, "Notification History", "Monetization & Growth"),
-    APP_CONTENT(11, "App Content", "Platform Configuration"),
-    ADMINISTRATOR_MANAGEMENT(12, "Administrator Management", "Governance & Security"),
-    SECURITY_ACTIVITY_LOGS(13, "Security & Activity Logs", "Governance & Security"),
-    SETTINGS(14, "Settings", "Governance & Security")
+enum class AdminSection(val titleBangla: String) {
+    DASHBOARD("ড্যাশবোর্ড"),
+    IMAGES("ছবি"),
+    CATEGORIES("ক্যাটাগরি"),
+    COMMENTS_REPORTS("কমেন্ট ও রিপোর্ট"),
+    NOTIFICATION_HELPER("নোটিফিকেশন সহায়ক"),
+    ADS("বিজ্ঞাপন"),
+    SETTINGS("সেটিংস")
 }
 
 enum class AdminRole(
-    val displayName: String,
-    val badgeLabel: String,
-    val canManageImages: Boolean,
-    val canManageCategories: Boolean,
-    val canManageUsers: Boolean,
-    val canModerateComments: Boolean,
-    val canManageAdMob: Boolean,
-    val canSendNotifications: Boolean,
-    val canManageAppContent: Boolean,
-    val canManageAdmins: Boolean
+    val firestoreRole: String,
+    val banglaBadge: String
 ) {
     OWNER(
-        displayName = "Owner",
-        badgeLabel = "OWNER • FULL AUTHORITY",
-        canManageImages = true,
-        canManageCategories = true,
-        canManageUsers = true,
-        canModerateComments = true,
-        canManageAdMob = true,
-        canSendNotifications = true,
-        canManageAppContent = true,
-        canManageAdmins = true
+        firestoreRole = "owner",
+        banglaBadge = "মালিক"
     ),
-    ADMINISTRATOR(
-        displayName = "Administrator",
-        badgeLabel = "ADMIN • CONTENT & OPS",
-        canManageImages = true,
-        canManageCategories = true,
-        canManageUsers = true,
-        canModerateComments = true,
-        canManageAdMob = true,
-        canSendNotifications = true,
-        canManageAppContent = true,
-        canManageAdmins = false
+    ADMIN(
+        firestoreRole = "admin",
+        banglaBadge = "অ্যাডমিন"
     ),
     MODERATOR(
-        displayName = "Moderator",
-        badgeLabel = "MOD • TRUST & SAFETY",
-        canManageImages = false,
-        canManageCategories = false,
-        canManageUsers = false,
-        canModerateComments = true,
-        canManageAdMob = false,
-        canSendNotifications = false,
-        canManageAppContent = false,
-        canManageAdmins = false
-    )
+        firestoreRole = "moderator",
+        banglaBadge = "মডারেটর"
+    );
+
+    fun canAccessSection(section: AdminSection): Boolean {
+        return when (this) {
+            OWNER, ADMIN -> true
+            MODERATOR -> section == AdminSection.COMMENTS_REPORTS
+        }
+    }
+
+    val canManageContent: Boolean
+        get() = this == OWNER || this == ADMIN
+
+    companion object {
+        fun fromFirestoreValue(raw: String?): AdminRole? {
+            return when (raw?.trim()?.lowercase()) {
+                "owner" -> OWNER
+                "admin", "administrator" -> ADMIN
+                "moderator" -> MODERATOR
+                else -> null
+            }
+        }
+    }
 }
 
-enum class AnalyticsRange(val label: String, val days: Int) {
-    DAILY("Daily (24h)", 1),
-    WEEKLY("Weekly (7d)", 7),
-    MONTHLY("Monthly (30d)", 30),
-    ALL_TIME("All Time", 3650)
+sealed class AuthUiState {
+    data object Loading : AuthUiState()
+    data object Unauthenticated : AuthUiState()
+    data class NotAdmin(
+        val uid: String,
+        val email: String,
+        val message: String = "আপনি অ্যাডমিন নন"
+    ) : AuthUiState()
+    data class Authorized(
+        val uid: String,
+        val email: String,
+        val displayName: String,
+        val role: AdminRole
+    ) : AuthUiState()
 }
 
-enum class ImageSortOption(val label: String) {
-    MOST_VIEWED("Most Viewed"),
-    MOST_LIKED("Most Liked"),
-    MOST_COMMENTED("Most Commented"),
-    MOST_UNLOCKED("Most Copied / Unlocked"),
-    RECENTLY_PUBLISHED("Recently Published"),
-    LEAST_PERFORMING("Least Performing")
+data class DashboardCounts(
+    val totalImages: Int = 0,
+    val publishedImages: Int = 0,
+    val unlistedImages: Int = 0,
+    val totalCategories: Int = 0,
+    val totalComments: Int = 0,
+    val openReports: Int = 0
+)
+
+@Keep
+data class FirestoreImageItem(
+    val id: String = "",
+    val title: String = "",
+    val shortName: String = "",
+    val description: String = "",
+    val categoryId: String = "uncategorized",
+    val categoryName: String = "অন্যান্য",
+    val imageUrl: String = "",
+    val aspectRatio: Double = 1.0,
+    val featured: Boolean = false,
+    val trending: Boolean = false,
+    val recommended: Boolean = true,
+    val collectionName: String = "",
+    val keywords: String = "",
+    val displayOrder: Int = 1,
+    val status: String = "published", // "published" or "draft"
+    val viewCount: Long = 0L,
+    val likeCount: Long = 0L,
+    val commentCount: Long = 0L,
+    val unlockCount: Long = 0L,
+    val shareCount: Long = 0L,
+    val createdAt: Timestamp? = null,
+    val updatedAt: Timestamp? = null,
+    val isServerConfirmed: Boolean = true
+) {
+    val isPublished: Boolean
+        get() = status.equals("published", ignoreCase = true)
 }
 
+@Keep
+data class FirestoreCategoryItem(
+    val id: String = "",
+    val name: String = "",
+    val description: String = "",
+    val coverImageUrl: String = "",
+    val imageCount: Int = 0,
+    val sortOrder: Int = 1,
+    val status: String = "published", // "published" or "draft"
+    val createdAt: Timestamp? = null,
+    val updatedAt: Timestamp? = null,
+    val isServerConfirmed: Boolean = true
+) {
+    val isActive: Boolean
+        get() = status.equals("published", ignoreCase = true)
+}
+
+@Keep
+data class FirestoreCommentItem(
+    val id: String = "",
+    val imageId: String = "",
+    val imageTitle: String = "",
+    val userId: String = "",
+    val userName: String = "",
+    val text: String = "",
+    val status: String = "visible", // "visible" or "hidden"
+    val adminReply: String = "",
+    val createdAt: Timestamp? = null,
+    val updatedAt: Timestamp? = null,
+    val isServerConfirmed: Boolean = true
+) {
+    val isVisible: Boolean
+        get() = !status.equals("hidden", ignoreCase = true)
+}
+
+@Keep
+data class FirestoreReportItem(
+    val id: String = "",
+    val targetId: String = "",
+    val targetType: String = "",
+    val imageId: String = "",
+    val commentId: String = "",
+    val reason: String = "",
+    val details: String = "",
+    val reporterId: String = "",
+    val status: String = "open", // "open" | "reviewed" | "dismissed"
+    val createdAt: Timestamp? = null,
+    val updatedAt: Timestamp? = null,
+    val isServerConfirmed: Boolean = true
+)
+
+@Keep
+data class AdvertisementSettingsModel(
+    val allAdsEnabled: Boolean = true,
+    val homeBannerEnabled: Boolean = true,
+    val detailBannerEnabled: Boolean = true,
+    val rewardedAdsEnabled: Boolean = true,
+    val interstitialAdsEnabled: Boolean = true,
+    val testAdMode: Boolean = true,
+    val reusePreviousUnlocks: Boolean = true,
+    val interstitialFrequency: Int = 4, // 1..50
+    val adFallbackMessage: String = "",
+    val bannerAdUnitId: String = "",
+    val rewardedAdUnitId: String = "",
+    val interstitialAdUnitId: String = ""
+)
+
+@Keep
+data class AppGlobalSettingsModel(
+    val playStoreUrl: String = "",
+    val requireLoginForPrompts: Boolean = false,
+    val allowComments: Boolean = true,
+    val welcomeHeadline: String = "",
+    val welcomeSubheadline: String = "",
+    val supportEmail: String = ""
+)
+
+// Retained Room entities for existing AdminDao / AdminDatabase compilation
 @Keep
 @Entity(tableName = "images")
 data class PromptImageEntity(
@@ -100,7 +200,7 @@ data class PromptImageEntity(
     val prompt: String = "",
     val featured: Boolean = false,
     val trending: Boolean = false,
-    val status: String = "PUBLISHED", // PUBLISHED or DRAFT
+    val status: String = "published",
     val displayOrder: Int = 1,
     val deepLink: String = "",
     val verifiedAppLink: String = "",
@@ -112,14 +212,6 @@ data class PromptImageEntity(
     val sharesCount: Long = 0L,
     val createdByUid: String = "",
     val createdAtMillis: Long = System.currentTimeMillis(),
-    val updatedAtMillis: Long = System.currentTimeMillis()
-)
-
-@Keep
-data class ProtectedImagePromptDoc(
-    val imageId: String = "",
-    val prompt: String = "",
-    val updatedByUid: String = "",
     val updatedAtMillis: Long = System.currentTimeMillis()
 )
 
@@ -142,7 +234,7 @@ data class AppUserEntity(
     @PrimaryKey val id: String = "",
     val username: String = "",
     val email: String = "",
-    val accountStatus: String = "ACTIVE", // ACTIVE, DISABLED, FLAGGED
+    val accountStatus: String = "ACTIVE",
     val likesCount: Long = 0L,
     val commentsCount: Long = 0L,
     val unlocksCount: Long = 0L,
@@ -161,7 +253,7 @@ data class CommentEntity(
     val userId: String = "",
     val username: String = "",
     val content: String = "",
-    val moderationStatus: String = "PENDING", // APPROVED, PENDING, HIDDEN, DELETED
+    val moderationStatus: String = "PENDING",
     val reported: Boolean = false,
     val reportReason: String = "",
     val adminReply: String = "",
@@ -199,22 +291,22 @@ data class AdMobSettingsEntity(
 @Entity(tableName = "app_settings")
 data class AppContentSettingsEntity(
     @PrimaryKey val id: String = "global_app_content",
-    val appName: String = "PromptVault AI",
+    val appName: String = "PromptAdmin",
     val appLogoUrl: String = "",
-    val deepLinkScheme: String = "promptvault",
-    val verifiedDomainHost: String = "promptvault.app",
-    val featuredBannerSubtitle: String = "Curated Masterpiece Prompts & Visual Inspiration",
+    val deepLinkScheme: String = "promptlens",
+    val verifiedDomainHost: String = "promptlens.app",
+    val featuredBannerSubtitle: String = "",
     val showFeaturedSection: Boolean = true,
     val showTrendingSection: Boolean = true,
     val showLatestSection: Boolean = true,
     val showPopularCategoriesSection: Boolean = true,
     val maxFeaturedItems: Int = 10,
     val maxTrendingItems: Int = 16,
-    val aboutInformation: String = "Premium curated AI photo inspiration and prompt engineering reference library for mobile creators.",
-    val privacyPolicyUrl: String = "https://promptvault.app/privacy",
-    val termsAndConditionsUrl: String = "https://promptvault.app/terms",
-    val contactEmail: String = "support@promptvault.app",
-    val playStoreUrl: String = "https://play.google.com/store/apps/details?id=com.aistudio.promptvault.user",
+    val aboutInformation: String = "",
+    val privacyPolicyUrl: String = "",
+    val termsAndConditionsUrl: String = "",
+    val contactEmail: String = "",
+    val playStoreUrl: String = "",
     val oneSignalAppId: String = "",
     val oneSignalFunctionUrl: String = "",
     val adminAuthFunctionUrl: String = "",
@@ -235,8 +327,8 @@ data class NotificationEntity(
     val imageThumbnailUrl: String = "",
     val deepLink: String = "",
     val scheduleType: String = "SEND_NOW",
-    val scheduledTimeDisplay: String = "Immediate Dispatch",
-    val sendingStatus: String = "QUEUED_FOR_SERVER",
+    val scheduledTimeDisplay: String = "",
+    val sendingStatus: String = "",
     val deliveryDetails: String = "",
     val createdByEmail: String = "",
     val createdAtMillis: Long = System.currentTimeMillis()
@@ -248,9 +340,9 @@ data class AdminAccountEntity(
     @PrimaryKey val uid: String = "",
     val email: String = "",
     val displayName: String = "",
-    val role: String = AdminRole.OWNER.name,
+    val role: String = "owner",
     val active: Boolean = true,
-    val permissionsSummary: String = "Full System Access",
+    val permissionsSummary: String = "",
     val createdAtMillis: Long = System.currentTimeMillis(),
     val lastLoginAtMillis: Long = System.currentTimeMillis()
 )

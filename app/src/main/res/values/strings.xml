@@ -1,20 +1,13 @@
 <resources>
     <string name="app_name">PromptAdmin</string>
-    <string name="admin_portal_subtitle">Enterprise AI Prompt Library Control Panel</string>
-    <string name="nav_dashboard">Dashboard</string>
-    <string name="nav_images">Image Management</string>
-    <string name="nav_categories">Categories</string>
-    <string name="nav_users">User Management</string>
-    <string name="nav_comments">Comment Moderation</string>
-    <string name="nav_likes">Likes &amp; Engagement</string>
-    <string name="nav_analytics">Analytics</string>
-    <string name="nav_admob">Advertisement Management</string>
-    <string name="nav_onesignal">OneSignal Notifications</string>
-    <string name="nav_notification_history">Notification History</string>
-    <string name="nav_app_content">App Content</string>
-    <string name="nav_admins">Administrator Management</string>
-    <string name="nav_security_logs">Security &amp; Activity Logs</string>
-    <string name="nav_settings">Settings</string>
-    <string name="sign_in_with_google">Sign in with Google</string>
-    <string name="url_only_policy_notice">Strict URL-Only Policy: Images are referenced via direct external URLs (.jpg, .jpeg, .png, .webp). File uploads and Firebase Storage are disabled.</string>
+    <string name="nav_dashboard">ড্যাশবোর্ড</string>
+    <string name="nav_images">ছবি</string>
+    <string name="nav_categories">ক্যাটাগরি</string>
+    <string name="nav_comments_reports">কমেন্ট ও রিপোর্ট</string>
+    <string name="nav_notification_helper">নোটিফিকেশন সহায়ক</string>
+    <string name="nav_ads">বিজ্ঞাপন</string>
+    <string name="nav_settings">সেটিংস</string>
+    <string name="sign_in_with_google">গুগল দিয়ে লগ ইন করুন</string>
+    <string name="not_admin_message">আপনি অ্যাডমিন নন</string>
+    <string name="logout">লগ আউট</string>
 </resources>

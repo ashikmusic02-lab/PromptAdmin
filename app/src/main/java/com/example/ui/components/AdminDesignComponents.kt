@@ -11,18 +11,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,21 +33,23 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.example.ui.theme.ChampagneContainer
-import com.example.ui.theme.ChampagneGold
 import com.example.ui.theme.ChampagneLight
 import com.example.ui.theme.GraphiteBorder
 import com.example.ui.theme.GraphiteCard
@@ -72,84 +72,61 @@ import com.example.ui.theme.VioletContainer
 import com.example.ui.theme.VioletPrimary
 import com.example.util.UrlAndDeepLinkValidator
 import com.example.util.UrlValidationResult
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-
-fun formatTimestamp(millis: Long): String {
-    if (millis <= 0L) return "—"
-    val sdf = SimpleDateFormat("MMM dd, yyyy • HH:mm", Locale.US)
-    return sdf.format(Date(millis))
-}
-
-fun formatShortDate(millis: Long): String {
-    if (millis <= 0L) return "—"
-    val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.US)
-    return sdf.format(Date(millis))
-}
 
 @Composable
-fun EnterpriseStatCard(
+fun BanglaStatCard(
     title: String,
     value: String,
-    subtitle: String,
     icon: ImageVector,
     accentColor: Color = VioletPrimary,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = GraphiteCard),
         border = BorderStroke(1.dp, GraphiteBorder),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = title.uppercase(Locale.US),
-                    style = MaterialTheme.typography.labelMedium,
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
                     color = TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(accentColor.copy(alpha = 0.16f))
-                        .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = title,
-                        tint = accentColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineLarge,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(accentColor.copy(alpha = 0.16f))
+                    .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = accentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
         }
     }
 }
@@ -157,18 +134,18 @@ fun EnterpriseStatCard(
 @Composable
 fun StatusPill(
     label: String,
-    tone: String = "NEUTRAL" // SUCCESS, WARNING, DANGER, GOLD, VIOLET, CYAN, NEUTRAL
+    tone: String = "NEUTRAL"
 ) {
-    val (bg, fg) = when (tone.uppercase(Locale.US)) {
-        "SUCCESS", "PUBLISHED", "ACTIVE", "APPROVED", "DISPATCHED_PROVIDER_CONFIRMED" ->
+    val (bg, fg) = when (tone.uppercase()) {
+        "SUCCESS", "PUBLISHED", "ACTIVE", "VISIBLE", "REVIEWED" ->
             StatusEmeraldBg to StatusEmerald
-        "WARNING", "DRAFT", "PENDING", "SCHEDULED", "QUEUED_FOR_SERVER", "FLAGGED" ->
+        "WARNING", "DRAFT", "UNLISTED", "PENDING", "OPEN" ->
             StatusAmberBg to StatusAmber
-        "DANGER", "DISABLED", "HIDDEN", "DELETED", "FAILED", "REPORTED" ->
+        "DANGER", "DISABLED", "HIDDEN", "DELETED", "DISMISSED" ->
             StatusRoseBg to StatusRose
         "GOLD", "OWNER", "FEATURED" ->
             ChampagneContainer to ChampagneLight
-        "VIOLET", "ADMINISTRATOR", "TRENDING" ->
+        "VIOLET", "ADMIN", "TRENDING" ->
             VioletContainer to VioletBright
         "CYAN", "MODERATOR" ->
             StatusCyanBg to StatusCyan
@@ -182,7 +159,7 @@ fun StatusPill(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = fg,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             maxLines = 1
@@ -190,126 +167,26 @@ fun StatusPill(
     }
 }
 
+/**
+ * Live image preview with automatic Google Drive link normalization and Coil intrinsic aspectRatio measurement.
+ * Calls [onLoadStateChanged] with `(isLoaded, aspectRatio)` where `aspectRatio` is clamped to `0.2..5.0`.
+ */
 @Composable
-fun SectionHeaderBar(
-    sectionNumber: Int,
-    title: String,
-    subtitle: String,
-    trailingContent: @Composable (() -> Unit)? = null
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-        border = BorderStroke(1.dp, GraphiteBorder),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            VioletContainer.copy(alpha = 0.55f),
-                            GraphiteCard,
-                            ChampagneContainer.copy(alpha = 0.30f)
-                        )
-                    )
-                )
-                .padding(20.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            color = ChampagneContainer,
-                            shape = RoundedCornerShape(6.dp),
-                            border = BorderStroke(1.dp, ChampagneGold.copy(alpha = 0.5f))
-                        ) {
-                            Text(
-                                text = "MODULE ${sectionNumber.toString().padStart(2, '0')}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ChampagneLight,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
-                        Text(
-                            text = "ENTERPRISE ADMIN CONTROL PANEL",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = VioletBright
-                        )
-                    }
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
-                    )
-                }
-                if (trailingContent != null) {
-                    Spacer(modifier = Modifier.width(12.dp))
-                    trailingContent()
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun UrlOnlyComplianceBanner() {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = VioletContainer.copy(alpha = 0.45f),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, VioletPrimary.copy(alpha = 0.45f))
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Link,
-                contentDescription = "Direct URL Policy",
-                tint = ChampagneLight,
-                modifier = Modifier.size(20.dp)
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Strict Direct Image URL Architecture (Zero Storage Uploads)",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "Images and thumbnails are referenced strictly via external direct links (.JPG, .JPEG, .PNG, .WEBP). File uploads and Firebase Storage are permanently disabled.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun LiveExternalImagePreview(
-    imageUrl: String,
-    height: Dp = 180.dp,
+fun CoilLiveImagePreview(
+    rawImageUrl: String,
+    height: Dp = 200.dp,
+    onLoadStateChanged: (isLoaded: Boolean, aspectRatio: Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val validation = UrlAndDeepLinkValidator.validateDirectImageUrl(imageUrl)
+    val validation = UrlAndDeepLinkValidator.validatePublicImageUrl(rawImageUrl)
+    val context = LocalContext.current
+
+    LaunchedEffect(rawImageUrl) {
+        if (validation !is UrlValidationResult.Valid) {
+            onLoadStateChanged(false, 1.0)
+        }
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -322,23 +199,25 @@ fun LiveExternalImagePreview(
                         .height(height)
                         .clip(RoundedCornerShape(14.dp))
                         .background(ObsidianBg)
-                        .border(1.dp, GraphiteBorder, RoundedCornerShape(14.dp)),
+                        .border(1.dp, GraphiteBorder, RoundedCornerShape(14.dp))
+                        .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Link,
-                            contentDescription = "Enter URL",
+                            imageVector = Icons.Default.Image,
+                            contentDescription = "ছবির প্রিভিউ",
                             tint = TextMuted,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(32.dp)
                         )
                         Text(
-                            text = "Supply a direct external image URL (.jpg, .jpeg, .png, .webp) to preview",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted
+                            text = "ছবির লিংক দিলে এখানে প্রিভিউ দেখা যাবে",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextMuted,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -349,30 +228,27 @@ fun LiveExternalImagePreview(
                         .fillMaxWidth()
                         .height(height)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(StatusRoseBg.copy(alpha = 0.55f))
+                        .background(StatusRoseBg.copy(alpha = 0.65f))
                         .border(1.dp, StatusRose, RoundedCornerShape(14.dp))
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ErrorOutline,
-                            contentDescription = "Invalid URL",
+                            contentDescription = "লিংক ত্রুটি",
                             tint = StatusRose,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(32.dp)
                         )
                         Text(
-                            text = "URL Validation Error",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = StatusRose
-                        )
-                        Text(
-                            text = validation.reason,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextPrimary
+                            text = "এই লিংকে ছবি খোলা যাচ্ছে না। ছবিটি পাবলিক কিনা দেখুন",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = StatusRose,
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
@@ -384,52 +260,83 @@ fun LiveExternalImagePreview(
                         .height(height)
                         .clip(RoundedCornerShape(14.dp))
                         .background(ObsidianBg)
-                        .border(1.dp, StatusEmerald.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                        .border(1.dp, GraphiteBorder, RoundedCornerShape(14.dp))
                 ) {
                     SubcomposeAsyncImage(
-                        model = validation.normalizedUrl,
-                        contentDescription = "Live URL Image Preview",
+                        model = ImageRequest.Builder(context)
+                            .data(validation.normalizedUrl)
+                            .addHeader(
+                                "User-Agent",
+                                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                            )
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "ছবির প্রিভিউ",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
+                        onLoading = {
+                            onLoadStateChanged(false, 1.0)
+                        },
+                        onSuccess = { state ->
+                            val drawable = state.result.drawable
+                            val w = drawable.intrinsicWidth
+                            val h = drawable.intrinsicHeight
+                            val ratio = if (w > 0 && h > 0) {
+                                (w.toDouble() / h.toDouble()).coerceIn(0.2, 5.0)
+                            } else {
+                                1.0
+                            }
+                            onLoadStateChanged(true, ratio)
+                        },
+                        onError = {
+                            onLoadStateChanged(false, 1.0)
+                        },
                         loading = {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                CircularProgressIndicator(
-                                    color = VioletPrimary,
-                                    modifier = Modifier.size(28.dp),
-                                    strokeWidth = 2.5.dp
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = VioletPrimary,
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 2.5.dp
+                                    )
+                                    Text(
+                                        text = "ছবি লোড হচ্ছে...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
                             }
                         },
                         error = {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(StatusRoseBg.copy(alpha = 0.65f))
+                                    .background(StatusRoseBg.copy(alpha = 0.75f))
                                     .padding(16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.BrokenImage,
-                                        contentDescription = "Failed to load remote image",
+                                        contentDescription = "ছবি লোড ব্যর্থ",
                                         tint = StatusRose,
-                                        modifier = Modifier.size(28.dp)
+                                        modifier = Modifier.size(30.dp)
                                     )
                                     Text(
-                                        text = "Remote Image Failed to Load",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = StatusRose
-                                    )
-                                    Text(
-                                        text = "The supplied URL syntax is valid, but the remote server did not return a readable image.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextPrimary
+                                        text = "এই লিংকে ছবি খোলা যাচ্ছে না। ছবিটি পাবলিক কিনা দেখুন",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = StatusRose,
+                                        textAlign = TextAlign.Center,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
                             }
@@ -450,12 +357,12 @@ fun LiveExternalImagePreview(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Verified format",
+                                contentDescription = "লিংক প্রস্তুত",
                                 tint = StatusEmerald,
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = "${validation.detectedFormat} • ${validation.host}",
+                                text = validation.host,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = StatusEmerald
                             )
@@ -470,24 +377,33 @@ fun LiveExternalImagePreview(
 @Composable
 fun UrlThumbnailBox(
     imageUrl: String,
-    size: Dp = 52.dp
+    size: Dp = 64.dp
 ) {
+    val context = LocalContext.current
+    val normalized = UrlAndDeepLinkValidator.normalizePublicImageUrl(imageUrl)
     Box(
         modifier = Modifier
             .size(size)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(ObsidianBg)
-            .border(1.dp, GraphiteBorder, RoundedCornerShape(10.dp)),
+            .border(1.dp, GraphiteBorder, RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center
     ) {
         SubcomposeAsyncImage(
-            model = imageUrl,
-            contentDescription = "Image Thumbnail",
+            model = ImageRequest.Builder(context)
+                .data(normalized)
+                .addHeader(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                )
+                .crossfade(true)
+                .build(),
+            contentDescription = "ছবি",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
             loading = {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                     strokeWidth = 2.dp,
                     color = VioletBright
                 )
@@ -495,9 +411,9 @@ fun UrlThumbnailBox(
             error = {
                 Icon(
                     imageVector = Icons.Default.BrokenImage,
-                    contentDescription = "Broken Thumbnail",
+                    contentDescription = "ছবি পাওয়া যায়নি",
                     tint = StatusRose,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
         )
@@ -508,7 +424,7 @@ fun UrlThumbnailBox(
 fun DestructiveConfirmationDialog(
     title: String,
     message: String,
-    confirmButtonText: String = "Confirm Delete",
+    confirmButtonText: String = "মুছুন",
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -541,7 +457,9 @@ fun DestructiveConfirmationDialog(
                     containerColor = StatusRose,
                     contentColor = TextPrimary
                 ),
-                modifier = Modifier.testTag("confirm_destructive_action_button")
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("confirm_destructive_action_button")
             ) {
                 Text(confirmButtonText)
             }
@@ -549,9 +467,10 @@ fun DestructiveConfirmationDialog(
         dismissButton = {
             OutlinedButton(
                 onClick = onDismiss,
-                border = BorderStroke(1.dp, GraphiteBorder)
+                border = BorderStroke(1.dp, GraphiteBorder),
+                modifier = Modifier.heightIn(min = 48.dp)
             ) {
-                Text("Cancel", color = TextSecondary)
+                Text("বাতিল", color = TextSecondary)
             }
         }
     )
@@ -574,13 +493,13 @@ fun EmptyDataStateCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(28.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(54.dp)
                     .clip(CircleShape)
                     .background(VioletContainer)
                     .border(1.dp, VioletPrimary.copy(alpha = 0.5f), CircleShape),
@@ -596,17 +515,20 @@ fun EmptyDataStateCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary
+                color = TextPrimary,
+                textAlign = TextAlign.Center
             )
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
+                color = TextSecondary,
+                textAlign = TextAlign.Center
             )
             if (actionLabel != null && onActionClick != null) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(
                     onClick = onActionClick,
+                    modifier = Modifier.heightIn(min = 48.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = VioletPrimary,
                         contentColor = TextPrimary
@@ -620,52 +542,22 @@ fun EmptyDataStateCard(
 }
 
 @Composable
-fun PermissionGuardBanner(requiredRoleLabel: String, currentRoleLabel: String) {
+fun MonospaceBadge(
+    text: String,
+    modifier: Modifier = Modifier
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = StatusAmberBg,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, StatusAmber.copy(alpha = 0.5f))
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Lock,
-                contentDescription = "Read-Only RBAC Mode",
-                tint = StatusAmber
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Role-Based Access Control: Read-Only Mode ($currentRoleLabel)",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = StatusAmber
-                )
-                Text(
-                    text = "Write actions in this module require $requiredRoleLabel privileges.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextPrimary
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun MonospaceBadge(text: String) {
-    Surface(
+        modifier = modifier,
         color = ObsidianBg,
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, GraphiteBorder)
     ) {
         Text(
             text = text,
             fontFamily = JetBrainsMonoFamily,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = ChampagneLight,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
         )
     }
 }

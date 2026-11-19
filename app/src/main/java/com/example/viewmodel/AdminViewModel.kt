@@ -3,24 +3,19 @@ package com.example.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.AdminDatabase
 import com.example.data.AdminRepository
 import com.example.data.FirebaseConnectionStatus
-import com.example.model.ActivityLogEntity
-import com.example.model.AdMobSettingsEntity
-import com.example.model.AdminAccountEntity
 import com.example.model.AdminRole
 import com.example.model.AdminSection
-import com.example.model.AnalyticsRange
-import com.example.model.AppContentSettingsEntity
-import com.example.model.AppUserEntity
-import com.example.model.CommentEntity
-import com.example.model.ImageSortOption
-import com.example.model.NotificationEntity
-import com.example.model.PromptCategoryEntity
-import com.example.model.PromptImageEntity
+import com.example.model.AdvertisementSettingsModel
+import com.example.model.AppGlobalSettingsModel
+import com.example.model.AuthUiState
+import com.example.model.DashboardCounts
+import com.example.model.FirestoreCategoryItem
+import com.example.model.FirestoreCommentItem
+import com.example.model.FirestoreImageItem
+import com.example.model.FirestoreReportItem
 import com.example.util.UrlAndDeepLinkValidator
-import com.example.util.UrlValidationResult
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -31,69 +26,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.util.Locale
-import java.util.UUID
-
-data class AdminSession(
-    val isAuthenticated: Boolean = false,
-    val uid: String = "",
-    val email: String = "",
-    val displayName: String = "",
-    val role: AdminRole = AdminRole.OWNER,
-    val authMethod: String = "Google Sign-In"
-)
-
-data class LiveDashboardStats(
-    val totalImages: Int = 0,
-    val publishedImages: Int = 0,
-    val draftImages: Int = 0,
-    val featuredImages: Int = 0,
-    val trendingImages: Int = 0,
-    val totalCategories: Int = 0,
-    val activeCategories: Int = 0,
-    val totalUsers: Int = 0,
-    val activeUsers: Int = 0,
-    val disabledUsers: Int = 0,
-    val totalViews: Long = 0L,
-    val uniqueViews: Long = 0L,
-    val totalLikes: Long = 0L,
-    val totalComments: Long = 0L,
-    val pendingOrReportedComments: Int = 0,
-    val totalPromptUnlocks: Long = 0L,
-    val totalShares: Long = 0L,
-    val totalNotificationsSent: Int = 0
-)
 
 class AdminViewModel(application: Application) : AndroidViewModel(application) {
 
-    companion object {
-        /**
-         * Administrator Gmail Allowlist.
-         * Only verified Google accounts in this list may enter the administrator control panel.
-         * Add additional emails here in the future as needed.
-         */
-        val ADMIN_EMAIL_ALLOWLIST: List<String> = listOf(
-            "sfforhadvai@gmail.com"
-        )
+    private val repository = AdminRepository(application)
 
-        fun isAuthorizedAdminEmail(email: String?, isEmailVerified: Boolean): Boolean {
-            if (!isEmailVerified || email.isNullOrBlank()) return false
-            val normalized = email.trim().lowercase(Locale.US)
-            return ADMIN_EMAIL_ALLOWLIST.any { it.trim().lowercase(Locale.US) == normalized }
-        }
-
-        fun isAuthorizedFirebaseUser(user: FirebaseUser?): Boolean {
-            if (user == null) return false
-            val isGoogleProvider = user.providerData.any { it.providerId == "google.com" }
-            return isGoogleProvider && isAuthorizedAdminEmail(user.email, user.isEmailVerified)
-        }
-    }
-
-    private val database = AdminDatabase.getInstance(application)
-    private val repository = AdminRepository(application, database.adminDao())
-
-    private val _session = MutableStateFlow(AdminSession(isAuthenticated = false))
-    val session: StateFlow<AdminSession> = _session.asStateFlow()
+    private val _authState = MutableStateFlow<AuthUiState>(AuthUiState.Loading)
+    val authState: StateFlow<AuthUiState> = _authState.asStateFlow()
 
     private val _authErrorMessage = MutableStateFlow<String?>(null)
     val authErrorMessage: StateFlow<String?> = _authErrorMessage.asStateFlow()
@@ -101,816 +40,530 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentSection = MutableStateFlow(AdminSection.DASHBOARD)
     val currentSection: StateFlow<AdminSection> = _currentSection.asStateFlow()
 
-    private val _analyticsRange = MutableStateFlow(AnalyticsRange.ALL_TIME)
-    val analyticsRange: StateFlow<AnalyticsRange> = _analyticsRange.asStateFlow()
+    private val _snackbarMessage = MutableStateFlow<String?>(null)
+    val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
 
-    private val _imageSortOption = MutableStateFlow(ImageSortOption.MOST_VIEWED)
-    val imageSortOption: StateFlow<ImageSortOption> = _imageSortOption.asStateFlow()
-
-    private val _statusBannerMessage = MutableStateFlow<String?>(null)
-    val statusBannerMessage: StateFlow<String?> = _statusBannerMessage.asStateFlow()
-
-    private val _isErrorBanner = MutableStateFlow(false)
-    val isErrorBanner: StateFlow<Boolean> = _isErrorBanner.asStateFlow()
-
-    private val _isSyncing = MutableStateFlow(false)
-    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
-
-    private val _preselectedNotificationImage = MutableStateFlow<PromptImageEntity?>(null)
-    val preselectedNotificationImage: StateFlow<PromptImageEntity?> = _preselectedNotificationImage.asStateFlow()
+    private val _isErrorSnackbar = MutableStateFlow(false)
+    val isErrorSnackbar: StateFlow<Boolean> = _isErrorSnackbar.asStateFlow()
 
     private val _connectionStatus = MutableStateFlow(repository.getConnectionStatus())
     val connectionStatus: StateFlow<FirebaseConnectionStatus> = _connectionStatus.asStateFlow()
 
-    init {
-        checkExistingFirebaseSession(application)
-    }
+    // Full-screen Image Add/Edit Form state
+    private val _isImageFormOpen = MutableStateFlow(false)
+    val isImageFormOpen: StateFlow<Boolean> = _isImageFormOpen.asStateFlow()
 
-    private fun checkExistingFirebaseSession(application: Application) {
-        try {
-            if (FirebaseApp.getApps(application).isNotEmpty()) {
-                val auth = FirebaseAuth.getInstance()
-                val currentUser = auth.currentUser
-                if (currentUser != null) {
-                    if (isAuthorizedFirebaseUser(currentUser)) {
-                        val email = currentUser.email.orEmpty()
-                        val uid = currentUser.uid
-                        viewModelScope.launch {
-                            repository.ensureInitialConfigBootstrap(email, uid)
-                            _session.value = AdminSession(
-                                isAuthenticated = true,
-                                uid = uid,
-                                email = email,
-                                displayName = currentUser.displayName?.ifBlank { email.substringBefore("@") }
-                                    ?: email.substringBefore("@"),
-                                role = AdminRole.OWNER,
-                                authMethod = "Firebase Google Sign-In"
-                            )
-                            refreshConnectionStatus()
-                        }
-                    } else {
-                        auth.signOut()
-                        _session.value = AdminSession(isAuthenticated = false)
-                        _authErrorMessage.value = "Access denied"
-                    }
-                }
-            }
-        } catch (_: Exception) {
-            _session.value = AdminSession(isAuthenticated = false)
-        }
-    }
+    private val _editingImage = MutableStateFlow<FirestoreImageItem?>(null)
+    val editingImage: StateFlow<FirestoreImageItem?> = _editingImage.asStateFlow()
 
-    val images: StateFlow<List<PromptImageEntity>> = repository.imagesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _activeFormDocumentId = MutableStateFlow("")
+    val activeFormDocumentId: StateFlow<String> = _activeFormDocumentId.asStateFlow()
 
-    val categories: StateFlow<List<PromptCategoryEntity>> = repository.categoriesFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _loadedPromptText = MutableStateFlow("")
+    val loadedPromptText: StateFlow<String> = _loadedPromptText.asStateFlow()
 
-    val users: StateFlow<List<AppUserEntity>> = repository.usersFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _isLoadingPrompt = MutableStateFlow(false)
+    val isLoadingPrompt: StateFlow<Boolean> = _isLoadingPrompt.asStateFlow()
 
-    val comments: StateFlow<List<CommentEntity>> = repository.commentsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _isImageSaving = MutableStateFlow(false)
+    val isImageSaving: StateFlow<Boolean> = _isImageSaving.asStateFlow()
 
-    val adMobSettings: StateFlow<AdMobSettingsEntity> = repository.adMobSettingsFlow
-        .combine(MutableStateFlow(AdMobSettingsEntity())) { dbVal, defaultVal -> dbVal ?: defaultVal }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AdMobSettingsEntity())
+    private val _isActionSubmitting = MutableStateFlow(false)
+    val isActionSubmitting: StateFlow<Boolean> = _isActionSubmitting.asStateFlow()
 
-    val appContentSettings: StateFlow<AppContentSettingsEntity> = repository.appContentSettingsFlow
-        .combine(MutableStateFlow(AppContentSettingsEntity())) { dbVal, defaultVal -> dbVal ?: defaultVal }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppContentSettingsEntity())
+    val images: StateFlow<List<FirestoreImageItem>> = repository.images
+    val categories: StateFlow<List<FirestoreCategoryItem>> = repository.categories
+    val comments: StateFlow<List<FirestoreCommentItem>> = repository.comments
+    val reports: StateFlow<List<FirestoreReportItem>> = repository.reports
+    val adSettings: StateFlow<AdvertisementSettingsModel> = repository.adSettings
+    val appSettings: StateFlow<AppGlobalSettingsModel> = repository.appSettings
+    val isLoadingData: StateFlow<Boolean> = repository.isLoadingData
 
-    val notifications: StateFlow<List<NotificationEntity>> = repository.notificationsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val adminAccounts: StateFlow<List<AdminAccountEntity>> = repository.adminAccountsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val activityLogs: StateFlow<List<ActivityLogEntity>> = repository.activityLogsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val liveStats: StateFlow<LiveDashboardStats> = combine(
+    val dashboardCounts: StateFlow<DashboardCounts> = combine(
         images,
         categories,
-        users,
         comments,
-        notifications
-    ) { imgs, cats, usrs, cmts, notifs ->
-        val range = _analyticsRange.value
-        val cutoffMillis = if (range == AnalyticsRange.ALL_TIME) {
-            0L
-        } else {
-            System.currentTimeMillis() - range.days * 24L * 3600L * 1000L
-        }
-        val filteredImgs = imgs.filter { it.createdAtMillis >= cutoffMillis }
-
-        LiveDashboardStats(
-            totalImages = filteredImgs.size,
-            publishedImages = filteredImgs.count { it.status == "PUBLISHED" },
-            draftImages = filteredImgs.count { it.status == "DRAFT" },
-            featuredImages = filteredImgs.count { it.featured },
-            trendingImages = filteredImgs.count { it.trending },
-            totalCategories = cats.size,
-            activeCategories = cats.count { it.active },
-            totalUsers = usrs.size,
-            activeUsers = usrs.count { it.accountStatus == "ACTIVE" },
-            disabledUsers = usrs.count { it.accountStatus == "DISABLED" },
-            totalViews = filteredImgs.sumOf { it.viewsCount },
-            uniqueViews = filteredImgs.sumOf { it.uniqueViewsCount },
-            totalLikes = filteredImgs.sumOf { it.likesCount },
-            totalComments = cmts.count { it.moderationStatus != "DELETED" }.toLong(),
-            pendingOrReportedComments = cmts.count { it.moderationStatus == "PENDING" || it.reported },
-            totalPromptUnlocks = filteredImgs.sumOf { it.promptUnlocksCount },
-            totalShares = filteredImgs.sumOf { it.sharesCount },
-            totalNotificationsSent = notifs.size
+        reports
+    ) { imgs, cats, cmts, rpts ->
+        val confirmedImgs = imgs.filter { it.isServerConfirmed }
+        val confirmedCats = cats.filter { it.isServerConfirmed }
+        val confirmedCmts = cmts.filter { it.isServerConfirmed }
+        val confirmedRpts = rpts.filter { it.isServerConfirmed }
+        DashboardCounts(
+            totalImages = confirmedImgs.size,
+            publishedImages = confirmedImgs.count { it.isPublished },
+            unlistedImages = confirmedImgs.count { !it.isPublished },
+            totalCategories = confirmedCats.size,
+            totalComments = confirmedCmts.size,
+            openReports = confirmedRpts.count { it.status.equals("open", ignoreCase = true) }
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), LiveDashboardStats())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardCounts())
 
-    fun refreshConnectionStatus() {
-        _connectionStatus.value = repository.getConnectionStatus()
+    private var authStateListener: FirebaseAuth.AuthStateListener? = null
+
+    init {
+        observeFirebaseAuthState(application)
+    }
+
+    private fun observeFirebaseAuthState(application: Application) {
+        try {
+            if (FirebaseApp.getApps(application).isEmpty()) {
+                _authState.value = AuthUiState.Unauthenticated
+                return
+            }
+            val auth = FirebaseAuth.getInstance()
+            val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
+                val user = firebaseAuth.currentUser
+                if (user == null) {
+                    repository.stopRealtimeListeners()
+                    _isImageFormOpen.value = false
+                    _authState.value = AuthUiState.Unauthenticated
+                } else {
+                    verifySignedInUser(user)
+                }
+            }
+            authStateListener = listener
+            auth.addAuthStateListener(listener)
+        } catch (_: Exception) {
+            _authState.value = AuthUiState.Unauthenticated
+        }
+    }
+
+    private fun verifySignedInUser(user: FirebaseUser) {
+        _authState.value = AuthUiState.Loading
+        viewModelScope.launch {
+            val res = repository.verifyAdminUserFromFirestore(user.uid)
+            res.onSuccess { role ->
+                if (role != null) {
+                    val email = user.email.orEmpty()
+                    val displayName = user.displayName?.ifBlank { email.substringBefore("@") }
+                        ?: email.substringBefore("@").ifBlank { "অ্যাডমিন" }
+                    _authState.value = AuthUiState.Authorized(
+                        uid = user.uid,
+                        email = email,
+                        displayName = displayName,
+                        role = role
+                    )
+                    if (role == AdminRole.MODERATOR) {
+                        _currentSection.value = AdminSection.COMMENTS_REPORTS
+                    } else if (!role.canAccessSection(_currentSection.value)) {
+                        _currentSection.value = AdminSection.DASHBOARD
+                    }
+                    repository.startRealtimeListeners(role) { errMsg ->
+                        showMessage(errMsg, isError = true)
+                    }
+                } else {
+                    repository.stopRealtimeListeners()
+                    _authState.value = AuthUiState.NotAdmin(
+                        uid = user.uid,
+                        email = user.email.orEmpty(),
+                        message = "আপনি অ্যাডমিন নন"
+                    )
+                }
+                _connectionStatus.value = repository.getConnectionStatus()
+            }.onFailure { err ->
+                repository.stopRealtimeListeners()
+                _authState.value = AuthUiState.NotAdmin(
+                    uid = user.uid,
+                    email = user.email.orEmpty(),
+                    message = repository.mapErrorToBangla(err)
+                )
+            }
+        }
+    }
+
+    fun retryAdminVerification() {
+        try {
+            val user = FirebaseAuth.getInstance().currentUser
+            if (user != null) {
+                verifySignedInUser(user)
+            } else {
+                _authState.value = AuthUiState.Unauthenticated
+            }
+        } catch (_: Exception) {
+            _authState.value = AuthUiState.Unauthenticated
+        }
+    }
+
+    fun onGoogleFirebaseUserAuthenticated(user: FirebaseUser?) {
+        if (user == null) {
+            _authErrorMessage.value = "লগ ইন সম্পন্ন হয়নি"
+            return
+        }
+        _authErrorMessage.value = null
+        verifySignedInUser(user)
     }
 
     fun setAuthErrorMessage(message: String?) {
         _authErrorMessage.value = message
     }
 
-    fun showFeedback(message: String, isError: Boolean = false) {
-        _statusBannerMessage.value = message
-        _isErrorBanner.value = isError
+    fun showMessage(message: String, isError: Boolean = false) {
+        _snackbarMessage.value = message
+        _isErrorSnackbar.value = isError
     }
 
-    fun dismissFeedback() {
-        _statusBannerMessage.value = null
-    }
-
-    /**
-     * Completes login ONLY if the Google-authenticated FirebaseUser passes the strict email allowlist
-     * and email verification check. Otherwise signs out immediately and shows "Access denied".
-     */
-    fun onGoogleFirebaseUserAuthenticated(user: FirebaseUser?) {
-        viewModelScope.launch {
-            if (!isAuthorizedFirebaseUser(user)) {
-                try {
-                    FirebaseAuth.getInstance().signOut()
-                } catch (_: Exception) {
-                }
-                _session.value = AdminSession(isAuthenticated = false)
-                _authErrorMessage.value = "Access denied"
-                return@launch
-            }
-
-            val verifiedUser = user!!
-            val cleanEmail = verifiedUser.email!!.trim()
-            val cleanUid = verifiedUser.uid
-            _authErrorMessage.value = null
-
-            repository.ensureInitialConfigBootstrap(cleanEmail, cleanUid)
-
-            _session.value = AdminSession(
-                isAuthenticated = true,
-                uid = cleanUid,
-                email = cleanEmail,
-                displayName = verifiedUser.displayName?.ifBlank { cleanEmail.substringBefore("@") }
-                    ?: cleanEmail.substringBefore("@"),
-                role = AdminRole.OWNER,
-                authMethod = "Firebase Google Sign-In"
-            )
-            refreshConnectionStatus()
-            repository.recordAuditLog(
-                adminUid = cleanUid,
-                adminEmail = cleanEmail,
-                adminRole = AdminRole.OWNER.name,
-                actionType = "ADMIN_GOOGLE_LOGIN",
-                targetEntity = "adminUsers/$cleanUid",
-                summary = "Authenticated allowlisted Google Owner session ($cleanEmail)"
-            )
-        }
-    }
-
-    fun switchActiveRoleForPreview(newRole: AdminRole) {
-        val cur = _session.value
-        if (!cur.isAuthenticated) return
-        _session.value = cur.copy(role = newRole)
-        showFeedback("Active RBAC role switched to ${newRole.displayName} (${newRole.badgeLabel})")
-    }
-
-    fun signOutAdmin() {
-        val cur = _session.value
-        viewModelScope.launch {
-            if (cur.isAuthenticated) {
-                repository.recordAuditLog(
-                    adminUid = cur.uid,
-                    adminEmail = cur.email,
-                    adminRole = cur.role.name,
-                    actionType = "ADMIN_SESSION_END",
-                    targetEntity = "adminUsers/${cur.uid}",
-                    summary = "Signed out administrator ${cur.email}"
-                )
-            }
-            try {
-                if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
-                    FirebaseAuth.getInstance().signOut()
-                }
-            } catch (_: Exception) {
-            }
-            _session.value = AdminSession(isAuthenticated = false)
-        }
+    fun dismissMessage() {
+        _snackbarMessage.value = null
     }
 
     fun navigateTo(section: AdminSection) {
+        val currentAuth = _authState.value
+        if (currentAuth is AuthUiState.Authorized && !currentAuth.role.canAccessSection(section)) {
+            showMessage("আপনার কেবল কমেন্ট ও রিপোর্ট দেখার অনুমতি আছে", isError = true)
+            return
+        }
+        _isImageFormOpen.value = false
         _currentSection.value = section
     }
 
-    fun openNotificationComposerForImage(image: PromptImageEntity) {
-        _preselectedNotificationImage.value = image
-        _currentSection.value = AdminSection.ONESIGNAL_NOTIFICATIONS
-    }
-
-    fun clearPreselectedNotificationImage() {
-        _preselectedNotificationImage.value = null
-    }
-
-    fun setAnalyticsRange(range: AnalyticsRange) {
-        _analyticsRange.value = range
-    }
-
-    fun setImageSortOption(sortOption: ImageSortOption) {
-        _imageSortOption.value = sortOption
+    /**
+     * Explicit sign-out called ONLY when the user taps "লগ আউট" and confirms.
+     */
+    fun signOutConfirmed() {
+        repository.stopRealtimeListeners()
+        _isImageFormOpen.value = false
+        try {
+            if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
+                FirebaseAuth.getInstance().signOut()
+            }
+        } catch (_: Exception) {
+        }
+        _authState.value = AuthUiState.Unauthenticated
     }
 
     // =========================================================================
-    // MODULE 3 & 4: IMAGE MANAGEMENT (STRICT DIRECT EXTERNAL URL ONLY)
+    // FULL-SCREEN IMAGE ADD / EDIT FORM
     // =========================================================================
-    fun saveImageRecord(
-        existingId: String?,
-        imageUrl: String,
-        shortName: String,
+    fun openNewImageForm() {
+        val currentAuth = _authState.value
+        if (currentAuth is AuthUiState.Authorized && !currentAuth.role.canManageContent) {
+            showMessage("অনুমতি নেই — আপনি অ্যাডমিন কিনা দেখুন", isError = true)
+            return
+        }
+        // Generate the document ID ONCE when the form opens
+        _activeFormDocumentId.value = repository.generateNewImageDocumentId()
+        _editingImage.value = null
+        _loadedPromptText.value = ""
+        _isLoadingPrompt.value = false
+        _isImageSaving.value = false
+        _isImageFormOpen.value = true
+        _currentSection.value = AdminSection.IMAGES
+    }
+
+    fun openEditImageForm(image: FirestoreImageItem) {
+        val currentAuth = _authState.value
+        if (currentAuth is AuthUiState.Authorized && !currentAuth.role.canManageContent) {
+            showMessage("অনুমতি নেই — আপনি অ্যাডমিন কিনা দেখুন", isError = true)
+            return
+        }
+        _activeFormDocumentId.value = image.id
+        _editingImage.value = image
+        _loadedPromptText.value = ""
+        _isLoadingPrompt.value = true
+        _isImageSaving.value = false
+        _isImageFormOpen.value = true
+        _currentSection.value = AdminSection.IMAGES
+
+        viewModelScope.launch {
+            val promptResult = repository.fetchPromptTextForImage(image.id)
+            _isLoadingPrompt.value = false
+            promptResult.onSuccess { text ->
+                _loadedPromptText.value = text
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    fun closeImageForm() {
+        if (_isImageSaving.value) return
+        _isImageFormOpen.value = false
+        _editingImage.value = null
+    }
+
+    /**
+     * Single-submit atomic image + prompt save.
+     * Immediately locks `_isImageSaving = true` on the first tap so repeated taps never create duplicates.
+     */
+    fun saveImageFromForm(
+        rawImageUrl: String,
         title: String,
         description: String,
-        categoryId: String,
-        categoryName: String,
-        prompt: String,
+        selectedCategoryId: String,
+        selectedCategoryName: String,
+        promptText: String,
         featured: Boolean,
         trending: Boolean,
         status: String,
-        displayOrder: Int,
-        onSuccess: () -> Unit = {}
+        measuredAspectRatio: Double,
+        isImagePreviewLoaded: Boolean
     ) {
-        val cur = _session.value
-        if (!cur.role.canManageImages) {
-            showFeedback("Permission Denied: ${cur.role.displayName} role cannot modify images.", isError = true)
+        // Immediate single-submit guard
+        if (_isImageSaving.value) return
+
+        val normalizedUrl = UrlAndDeepLinkValidator.normalizePublicImageUrl(rawImageUrl)
+        if (normalizedUrl.isBlank()) {
+            showMessage("ছবির লিংক দিন", isError = true)
+            return
+        }
+        if (!isImagePreviewLoaded) {
+            showMessage("এই লিংকে ছবি খোলা যাচ্ছে না। ছবিটি পাবলিক কিনা দেখুন", isError = true)
+            return
+        }
+        val cleanTitle = title.trim()
+        if (cleanTitle.isEmpty()) {
+            showMessage("শিরোনাম লিখুন", isError = true)
+            return
+        }
+        if (cleanTitle.length > 150) {
+            showMessage("শিরোনাম সর্বোচ্চ ১৫০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
+        val cleanDescription = description.trim()
+        if (cleanDescription.length > 1000) {
+            showMessage("বিবরণ সর্বোচ্চ ১০০০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
+        val cleanPrompt = promptText.trim()
+        if (cleanPrompt.isEmpty()) {
+            showMessage("প্রম্পট লিখুন", isError = true)
+            return
+        }
+        if (cleanPrompt.length > 5000) {
+            showMessage("প্রম্পট সর্বোচ্চ ৫০০০ অক্ষরের হতে পারে", isError = true)
             return
         }
 
-        val urlValidation = UrlAndDeepLinkValidator.validateDirectImageUrl(imageUrl)
-        if (urlValidation !is UrlValidationResult.Valid) {
-            val reason = (urlValidation as? UrlValidationResult.Invalid)?.reason
-                ?: "A valid direct external image URL (.jpg, .jpeg, .png, .webp) is required."
-            showFeedback(reason, isError = true)
-            return
+        val editing = _editingImage.value
+        val docId = _activeFormDocumentId.value.ifBlank {
+            editing?.id ?: repository.generateNewImageDocumentId()
+        }
+        _activeFormDocumentId.value = docId
+
+        val finalCategoryId = selectedCategoryId.trim().ifEmpty { "uncategorized" }
+        val finalCategoryName = if (finalCategoryId == "uncategorized") {
+            "অন্যান্য"
+        } else {
+            selectedCategoryName.trim().ifEmpty { "অন্যান্য" }
         }
 
-        if (shortName.isBlank() || title.isBlank() || prompt.isBlank() || categoryId.isBlank()) {
-            showFeedback("Short Name, Title, Category, and AI Generation Prompt are required.", isError = true)
-            return
-        }
+        val autoShortName = UrlAndDeepLinkValidator.generateShortNameFromTitle(cleanTitle)
+        val autoKeywords = UrlAndDeepLinkValidator.generateKeywordsFromTitle(cleanTitle)
+        val nextDisplayOrder = editing?.displayOrder
+            ?: ((images.value.maxOfOrNull { it.displayOrder } ?: 0) + 1)
+        val recommendedVal = editing?.recommended ?: true
 
+        _isImageSaving.value = true
         viewModelScope.launch {
-            val isNew = existingId.isNullOrBlank()
-            val finalId = if (isNew) {
-                UrlAndDeepLinkValidator.generateUniqueImageId(shortName)
-            } else {
-                existingId!!
-            }
-            val scheme = appContentSettings.value.deepLinkScheme
-            val host = appContentSettings.value.verifiedDomainHost
-            val autoDeepLink = UrlAndDeepLinkValidator.buildAutoDeepLink(scheme, finalId)
-            val verifiedLink = UrlAndDeepLinkValidator.buildVerifiedAppLink(host, finalId)
-
-            val existing = images.value.firstOrNull { it.id == finalId }
-            val now = System.currentTimeMillis()
-
-            val record = PromptImageEntity(
-                id = finalId,
-                imageUrl = urlValidation.normalizedUrl,
-                shortName = shortName.trim(),
-                title = title.trim(),
-                description = description.trim(),
-                categoryId = categoryId,
-                categoryName = categoryName,
-                prompt = prompt.trim(),
+            val result = repository.saveImageAndPromptAtomic(
+                documentId = docId,
+                isEdit = editing != null,
+                previousCategoryId = editing?.categoryId,
+                title = cleanTitle,
+                shortName = autoShortName,
+                description = cleanDescription,
+                categoryId = finalCategoryId,
+                categoryName = finalCategoryName,
+                imageUrl = normalizedUrl,
+                aspectRatio = measuredAspectRatio.coerceIn(0.2, 5.0),
                 featured = featured,
                 trending = trending,
-                status = status,
-                displayOrder = displayOrder,
-                deepLink = autoDeepLink,
-                verifiedAppLink = verifiedLink,
-                viewsCount = existing?.viewsCount ?: 0L,
-                uniqueViewsCount = existing?.uniqueViewsCount ?: 0L,
-                likesCount = existing?.likesCount ?: 0L,
-                commentsCount = existing?.commentsCount ?: 0L,
-                promptUnlocksCount = existing?.promptUnlocksCount ?: 0L,
-                sharesCount = existing?.sharesCount ?: 0L,
-                createdByUid = existing?.createdByUid ?: cur.uid,
-                createdAtMillis = existing?.createdAtMillis ?: now,
-                updatedAtMillis = now
+                recommended = recommendedVal,
+                keywords = autoKeywords,
+                displayOrder = nextDisplayOrder,
+                status = if (status.equals("draft", ignoreCase = true)) "draft" else "published",
+                promptText = cleanPrompt
             )
-
-            val result = repository.saveImage(
-                image = record,
-                adminUid = cur.uid,
-                adminEmail = cur.email,
-                adminRole = cur.role.name,
-                isNew = isNew
-            )
+            _isImageSaving.value = false
             result.onSuccess {
-                showFeedback("${if (isNew) "Created" else "Updated"} '${record.title}' • Prompt isolated in imagePrompts/${record.id}")
-                onSuccess()
+                _isImageFormOpen.value = false
+                _editingImage.value = null
+                showMessage("ছবি সেভ হয়েছে", isError = false)
             }.onFailure { err ->
-                showFeedback("Failed to save image: ${err.localizedMessage}", isError = true)
+                // Stay on the form, re-enable button, show real Bangla error
+                showMessage(repository.mapErrorToBangla(err), isError = true)
             }
         }
     }
 
-    fun toggleImageQuickFlag(
-        image: PromptImageEntity,
-        togglePublish: Boolean = false,
-        toggleFeatured: Boolean = false,
-        toggleTrending: Boolean = false,
-        newDisplayOrder: Int? = null
-    ) {
-        val cur = _session.value
-        if (!cur.role.canManageImages) {
-            showFeedback("Permission Denied: ${cur.role.displayName} role cannot modify images.", isError = true)
-            return
-        }
+    fun deleteImageConfirmed(image: FirestoreImageItem) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
         viewModelScope.launch {
-            val updated = image.copy(
-                status = if (togglePublish) {
-                    if (image.status == "PUBLISHED") "DRAFT" else "PUBLISHED"
-                } else image.status,
-                featured = if (toggleFeatured) !image.featured else image.featured,
-                trending = if (toggleTrending) !image.trending else image.trending,
-                displayOrder = newDisplayOrder ?: image.displayOrder,
-                updatedAtMillis = System.currentTimeMillis()
-            )
-            repository.saveImage(updated, cur.uid, cur.email, cur.role.name, isNew = false)
-                .onSuccess {
-                    showFeedback("Updated '${updated.title}' (Status=${updated.status}, Featured=${updated.featured}, Trending=${updated.trending})")
-                }
+            val res = repository.deleteImageAtomic(image)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("ছবি মুছে ফেলা হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
         }
     }
 
-    fun deleteImageConfirmed(image: PromptImageEntity) {
-        val cur = _session.value
-        if (!cur.role.canManageImages) {
-            showFeedback("Permission Denied: Only Owner or Administrator can delete images.", isError = true)
-            return
-        }
+    fun moveImageOrder(image: FirestoreImageItem, moveUp: Boolean) {
+        if (_isActionSubmitting.value) return
+        val currentList = images.value
+        val index = currentList.indexOfFirst { it.id == image.id }
+        if (index == -1) return
+        val targetIndex = if (moveUp) index - 1 else index + 1
+        if (targetIndex !in currentList.indices) return
+
+        val neighbor = currentList[targetIndex]
+        _isActionSubmitting.value = true
         viewModelScope.launch {
-            repository.deleteImage(image, cur.uid, cur.email, cur.role.name)
-                .onSuccess {
-                    showFeedback("Deleted image '${image.title}' (${image.id})")
-                }
-                .onFailure {
-                    showFeedback("Failed to delete image: ${it.localizedMessage}", isError = true)
-                }
+            val res = repository.swapImageDisplayOrder(image, neighbor)
+            _isActionSubmitting.value = false
+            res.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
         }
     }
 
     // =========================================================================
-    // MODULE 5: CATEGORY MANAGEMENT
+    // CATEGORIES
     // =========================================================================
-    fun saveCategoryRecord(
-        existingId: String?,
+    fun saveCategory(
+        existingCategory: FirestoreCategoryItem?,
         name: String,
-        description: String,
-        thumbnailUrl: String,
-        displayOrder: Int,
         active: Boolean,
         onSuccess: () -> Unit = {}
     ) {
-        val cur = _session.value
-        if (!cur.role.canManageCategories) {
-            showFeedback("Permission Denied: ${cur.role.displayName} role cannot modify categories.", isError = true)
+        if (_isActionSubmitting.value) return
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) {
+            showMessage("ক্যাটাগরির নাম লিখুন", isError = true)
             return
         }
-        val urlCheck = UrlAndDeepLinkValidator.validateDirectImageUrl(thumbnailUrl)
-        if (urlCheck !is UrlValidationResult.Valid) {
-            val reason = (urlCheck as? UrlValidationResult.Invalid)?.reason
-                ?: "Category thumbnail requires a valid direct external image URL."
-            showFeedback(reason, isError = true)
-            return
-        }
-        if (name.isBlank()) {
-            showFeedback("Category Name is required.", isError = true)
-            return
-        }
+        _isActionSubmitting.value = true
         viewModelScope.launch {
-            val isNew = existingId.isNullOrBlank()
-            val finalId = existingId ?: "cat_${name.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_').take(16)}_${UUID.randomUUID().toString().take(5)}"
-            val now = System.currentTimeMillis()
-            val record = PromptCategoryEntity(
-                id = finalId,
-                name = name.trim(),
-                description = description.trim(),
-                thumbnailUrl = urlCheck.normalizedUrl,
-                displayOrder = displayOrder,
-                active = active,
-                createdAtMillis = now,
-                updatedAtMillis = now
+            val res = repository.saveCategoryAtomic(
+                existingCategory = existingCategory,
+                name = cleanName,
+                active = active
             )
-            repository.saveCategory(record, cur.uid, cur.email, cur.role.name, isNew)
-                .onSuccess {
-                    showFeedback("${if (isNew) "Created" else "Updated"} category '${record.name}'")
-                    onSuccess()
-                }
-                .onFailure {
-                    showFeedback("Failed to save category: ${it.localizedMessage}", isError = true)
-                }
-        }
-    }
-
-    fun deleteCategoryProtected(
-        category: PromptCategoryEntity,
-        migrateToCategory: PromptCategoryEntity?,
-        deleteContainedImages: Boolean,
-        onSuccess: () -> Unit = {}
-    ) {
-        val cur = _session.value
-        if (!cur.role.canManageCategories) {
-            showFeedback("Permission Denied: ${cur.role.displayName} role cannot delete categories.", isError = true)
-            return
-        }
-        viewModelScope.launch {
-            repository.deleteCategoryWithResolution(
-                category = category,
-                migrateToCategory = migrateToCategory,
-                deleteContainedImages = deleteContainedImages,
-                adminUid = cur.uid,
-                adminEmail = cur.email,
-                adminRole = cur.role.name
-            ).onSuccess {
-                showFeedback("Deleted category '${category.name}'")
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("ক্যাটাগরি সেভ হয়েছে", isError = false)
                 onSuccess()
             }.onFailure { err ->
-                showFeedback(err.localizedMessage ?: "Category deletion blocked", isError = true)
+                showMessage(repository.mapErrorToBangla(err), isError = true)
             }
         }
     }
 
-    // =========================================================================
-    // MODULE 6: USER MANAGEMENT
-    // =========================================================================
-    fun registerOrUpdateUser(
-        existingUser: AppUserEntity?,
-        username: String,
-        email: String,
-        accountStatus: String,
-        moderationNote: String
-    ) {
-        val cur = _session.value
-        if (!cur.role.canManageUsers) {
-            showFeedback("Permission Denied: ${cur.role.displayName} role cannot modify user accounts.", isError = true)
-            return
-        }
-        if (username.isBlank()) {
-            showFeedback("Username is required.", isError = true)
-            return
-        }
+    fun deleteCategoryConfirmed(category: FirestoreCategoryItem) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
         viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            val userRecord = existingUser?.copy(
-                username = username.trim(),
-                email = email.trim(),
-                accountStatus = accountStatus,
-                moderationNote = moderationNote.trim(),
-                lastActivityAtMillis = now
-            ) ?: AppUserEntity(
-                id = "usr_${UUID.randomUUID().toString().replace("-", "").take(10)}",
-                username = username.trim(),
-                email = email.trim(),
-                accountStatus = accountStatus,
-                moderationNote = moderationNote.trim(),
-                registeredAtMillis = now,
-                lastActivityAtMillis = now
-            )
-            repository.upsertUserRecord(
-                user = userRecord,
-                adminUid = cur.uid,
-                adminEmail = cur.email,
-                adminRole = cur.role.name,
-                actionSummary = "Set user @${userRecord.username} (${userRecord.id}) status to ${userRecord.accountStatus}"
-            ).onSuccess {
-                showFeedback("Updated user @${userRecord.username} (${userRecord.accountStatus})")
-            }.onFailure {
-                showFeedback("Failed to update user: ${it.localizedMessage}", isError = true)
-            }
-        }
-    }
-
-    // =========================================================================
-    // MODULE 7: COMMENT MODERATION (CREATES FORCE moderationStatus == 'PENDING')
-    // =========================================================================
-    fun moderateComment(
-        comment: CommentEntity,
-        newStatus: String,
-        adminReply: String = comment.adminReply,
-        clearReportFlag: Boolean = false
-    ) {
-        val cur = _session.value
-        if (!cur.role.canModerateComments) {
-            showFeedback("Permission Denied: Cannot moderate comments.", isError = true)
-            return
-        }
-        viewModelScope.launch {
-            val updated = comment.copy(
-                moderationStatus = newStatus,
-                adminReply = adminReply.trim(),
-                reported = if (clearReportFlag) false else comment.reported,
-                moderatedByEmail = cur.email,
-                updatedAtMillis = System.currentTimeMillis()
-            )
-            repository.updateCommentModeration(
-                comment = updated,
-                adminUid = cur.uid,
-                adminEmail = cur.email,
-                adminRole = cur.role.name,
-                actionLabel = "Set status=$newStatus"
-            ).onSuccess {
-                showFeedback("Comment by @${comment.username} updated ($newStatus)")
-            }
-        }
-    }
-
-    fun createAdminCommentEntry(
-        image: PromptImageEntity,
-        username: String,
-        content: String,
-        reported: Boolean,
-        reportReason: String
-    ) {
-        if (content.isBlank() || username.isBlank()) {
-            showFeedback("Username and comment text are required.", isError = true)
-            return
-        }
-        val cur = _session.value
-        viewModelScope.launch {
-            val now = System.currentTimeMillis()
-            // Forced to PENDING on creation to match firestore.rules
-            val comment = CommentEntity(
-                id = "cmt_${UUID.randomUUID().toString().take(8)}",
-                imageId = image.id,
-                imageTitle = image.title,
-                userId = cur.uid,
-                username = username.trim(),
-                content = content.trim(),
-                moderationStatus = "PENDING",
-                reported = reported,
-                reportReason = reportReason.trim(),
-                moderatedByEmail = cur.email,
-                createdAtMillis = now,
-                updatedAtMillis = now
-            )
-            repository.updateCommentModeration(comment, cur.uid, cur.email, cur.role.name, "Created PENDING comment record")
-            val updatedImage = image.copy(commentsCount = image.commentsCount + 1, updatedAtMillis = now)
-            repository.saveImage(updatedImage, cur.uid, cur.email, cur.role.name, isNew = false)
-            showFeedback("Recorded comment on '${image.title}' (Status: PENDING)")
-        }
-    }
-
-    fun deleteCommentPermanently(comment: CommentEntity) {
-        val cur = _session.value
-        if (!cur.role.canModerateComments) return
-        viewModelScope.launch {
-            repository.deleteCommentPermanently(comment, cur.uid, cur.email, cur.role.name)
-                .onSuccess { showFeedback("Deleted comment ${comment.id}") }
-        }
-    }
-
-    // =========================================================================
-    // MODULE 8: ENGAGEMENT VERIFICATION / TELEMETRY SYNC
-    // =========================================================================
-    fun updateImageTelemetryCounters(
-        image: PromptImageEntity,
-        viewsCount: Long,
-        uniqueViewsCount: Long,
-        likesCount: Long,
-        promptUnlocksCount: Long,
-        sharesCount: Long
-    ) {
-        val cur = _session.value
-        if (!cur.role.canManageImages) {
-            showFeedback("Permission Denied: Only Owner/Admin can adjust verified telemetry counters.", isError = true)
-            return
-        }
-        viewModelScope.launch {
-            val safeUnique = uniqueViewsCount.coerceAtMost(viewsCount).coerceAtLeast(0L)
-            val updated = image.copy(
-                viewsCount = viewsCount.coerceAtLeast(0L),
-                uniqueViewsCount = safeUnique,
-                likesCount = likesCount.coerceAtLeast(0L),
-                promptUnlocksCount = promptUnlocksCount.coerceAtLeast(0L),
-                sharesCount = sharesCount.coerceAtLeast(0L),
-                updatedAtMillis = System.currentTimeMillis()
-            )
-            repository.saveImage(updated, cur.uid, cur.email, cur.role.name, isNew = false)
-                .onSuccess {
-                    showFeedback("Synchronized engagement counters for '${image.title}'")
-                }
-        }
-    }
-
-    // =========================================================================
-    // MODULE 9: GOOGLE ADMOB CONFIGURATION
-    // =========================================================================
-    fun updateAdMobConfiguration(updated: AdMobSettingsEntity) {
-        val cur = _session.value
-        if (!cur.role.canManageAdMob) {
-            showFeedback("Permission Denied: ${cur.role.displayName} role cannot modify AdMob settings.", isError = true)
-            return
-        }
-        viewModelScope.launch {
-            val stamped = updated.copy(
-                updatedByEmail = cur.email,
-                updatedAtMillis = System.currentTimeMillis()
-            )
-            repository.saveAdMobSettings(stamped, cur.uid, cur.email, cur.role.name)
-                .onSuccess {
-                    showFeedback("Saved Google AdMob configuration & placement switches")
-                }
-                .onFailure {
-                    showFeedback("Failed to save AdMob configuration: ${it.localizedMessage}", isError = true)
-                }
-        }
-    }
-
-    // =========================================================================
-    // MODULE 10 & 12: ONESIGNAL PUSH NOTIFICATIONS & HISTORY
-    // =========================================================================
-    fun sendOrScheduleNotification(
-        title: String,
-        message: String,
-        targetAudience: String,
-        selectedImage: PromptImageEntity?,
-        customDeepLink: String,
-        scheduleType: String,
-        scheduledTimeDisplay: String,
-        onComplete: () -> Unit = {}
-    ) {
-        val cur = _session.value
-        if (!cur.role.canSendNotifications) {
-            showFeedback("Permission Denied: ${cur.role.displayName} role cannot send push notifications.", isError = true)
-            return
-        }
-        if (title.isBlank() || message.isBlank()) {
-            showFeedback("Notification Title and Message are required.", isError = true)
-            return
-        }
-        val scheme = appContentSettings.value.deepLinkScheme
-        val finalDeepLink = selectedImage?.deepLink?.ifBlank {
-            UrlAndDeepLinkValidator.buildAutoDeepLink(scheme, selectedImage.id)
-        } ?: customDeepLink.trim().ifBlank { "$scheme://home" }
-
-        if (finalDeepLink.startsWith("http://") || finalDeepLink.startsWith("https://")) {
-            val allowedHost = appContentSettings.value.verifiedDomainHost
-            if (!finalDeepLink.contains(allowedHost)) {
-                showFeedback("Security Policy: Notifications must never send users to an unrelated third-party website.", isError = true)
-                return
-            }
-        }
-
-        viewModelScope.launch {
-            val notification = NotificationEntity(
-                id = "ntf_${UUID.randomUUID().toString().take(8)}",
-                title = title.trim(),
-                message = message.trim(),
-                targetAudience = targetAudience,
-                imageId = selectedImage?.id.orEmpty(),
-                imageTitle = selectedImage?.title ?: "App Home Destination",
-                imageThumbnailUrl = selectedImage?.imageUrl.orEmpty(),
-                deepLink = finalDeepLink,
-                scheduleType = scheduleType,
-                scheduledTimeDisplay = if (scheduleType == "SEND_NOW") "Immediate Dispatch" else scheduledTimeDisplay.ifBlank { "Scheduled" },
-                createdByEmail = cur.email,
-                createdAtMillis = System.currentTimeMillis()
-            )
-            repository.dispatchOneSignalNotification(
-                notification = notification,
-                adminUid = cur.uid,
-                adminEmail = cur.email,
-                adminRole = cur.role.name
-            ).onSuccess { saved ->
-                showFeedback("Notification '${saved.title}' recorded (${saved.sendingStatus}) • Deep Link: ${saved.deepLink}")
-                onComplete()
+            val res = repository.deleteCategoryKeepImages(category)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("ক্যাটাগরি মুছে ফেলা হয়েছে। এই ক্যাটাগরির ছবিগুলো এখন 'অন্যান্য' হিসেবে থাকবে।", isError = false)
             }.onFailure { err ->
-                showFeedback("Notification failed: ${err.localizedMessage}", isError = true)
+                showMessage(repository.mapErrorToBangla(err), isError = true)
             }
         }
     }
 
     // =========================================================================
-    // MODULE 11: APP CONTENT & PLATFORM CONFIGURATION
+    // COMMENTS & REPORTS
     // =========================================================================
-    fun updateAppContentConfiguration(updated: AppContentSettingsEntity) {
-        val cur = _session.value
-        if (!cur.role.canManageAppContent) {
-            showFeedback("Permission Denied: ${cur.role.displayName} role cannot modify App Content.", isError = true)
-            return
-        }
-        if (updated.appLogoUrl.isNotBlank()) {
-            val check = UrlAndDeepLinkValidator.validateDirectImageUrl(updated.appLogoUrl)
-            if (check is UrlValidationResult.Invalid) {
-                showFeedback("App Logo URL invalid: ${check.reason}", isError = true)
-                return
-            }
-        }
+    fun toggleCommentVisibility(comment: FirestoreCommentItem) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        val makeVisible = !comment.isVisible
         viewModelScope.launch {
-            val stamped = updated.copy(
-                updatedByEmail = cur.email,
-                updatedAtMillis = System.currentTimeMillis()
-            )
-            repository.saveAppContentSettings(stamped, cur.uid, cur.email, cur.role.name)
-                .onSuccess {
-                    showFeedback("App Content & Deep Link Scheme (${stamped.deepLinkScheme}://) saved")
-                }
-                .onFailure {
-                    showFeedback("Failed to save App Content: ${it.localizedMessage}", isError = true)
-                }
-        }
-    }
-
-    // =========================================================================
-    // MODULE 13: ADMINISTRATOR & PERMISSION MANAGEMENT
-    // =========================================================================
-    fun saveAdministratorAccount(
-        uid: String,
-        email: String,
-        displayName: String,
-        role: AdminRole,
-        active: Boolean
-    ) {
-        val cur = _session.value
-        if (!cur.role.canManageAdmins) {
-            showFeedback("Permission Denied: Only Owner role can manage administrator accounts.", isError = true)
-            return
-        }
-        if (email.isBlank() || displayName.isBlank()) {
-            showFeedback("Administrator Email and Display Name are required.", isError = true)
-            return
-        }
-        viewModelScope.launch {
-            val cleanUid = uid.trim().ifBlank { "adm_${email.trim().lowercase().hashCode().toUInt()}" }
-            val record = AdminAccountEntity(
-                uid = cleanUid,
-                email = email.trim(),
-                displayName = displayName.trim(),
-                role = role.name,
-                active = active,
-                permissionsSummary = role.badgeLabel,
-                createdAtMillis = System.currentTimeMillis(),
-                lastLoginAtMillis = System.currentTimeMillis()
-            )
-            repository.saveAdminAccount(record, cur.uid, cur.email, cur.role.name)
-                .onSuccess {
-                    showFeedback("Saved administrator ${record.email} (${role.displayName})")
-                }
-        }
-    }
-
-    fun removeAdministratorAccount(target: AdminAccountEntity) {
-        val cur = _session.value
-        if (!cur.role.canManageAdmins) {
-            showFeedback("Permission Denied: Only Owner role can remove administrators.", isError = true)
-            return
-        }
-        if (target.uid == cur.uid) {
-            showFeedback("Safety Guard: You cannot delete your own active Owner account.", isError = true)
-            return
-        }
-        viewModelScope.launch {
-            repository.removeAdminAccount(target, cur.uid, cur.email, cur.role.name)
-                .onSuccess {
-                    showFeedback("Removed administrator ${target.email}")
-                }
-        }
-    }
-
-    // =========================================================================
-    // MODULE 14: FIREBASE CLOUD SYNCHRONIZATION
-    // =========================================================================
-    fun triggerFirestoreFullSync() {
-        val cur = _session.value
-        viewModelScope.launch {
-            _isSyncing.value = true
-            refreshConnectionStatus()
-            val res = repository.syncAllWithFirestore(cur.uid, cur.email, cur.role.name)
-            _isSyncing.value = false
-            res.onSuccess { msg ->
-                showFeedback(msg, isError = false)
+            val res = repository.setCommentVisibility(comment, makeVisible)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage(if (makeVisible) "কমেন্ট দৃশ্যমান করা হয়েছে" else "কমেন্ট লুকানো হয়েছে", isError = false)
             }.onFailure { err ->
-                showFeedback(err.localizedMessage ?: "Firestore sync requires app/google-services.json", isError = true)
+                showMessage(repository.mapErrorToBangla(err), isError = true)
             }
+        }
+    }
+
+    fun replyToComment(comment: FirestoreCommentItem, replyText: String, onDone: () -> Unit = {}) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.saveCommentAdminReply(comment, replyText)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("উত্তর সেভ হয়েছে", isError = false)
+                onDone()
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    fun deleteCommentConfirmed(comment: FirestoreCommentItem) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.deleteCommentAtomic(comment)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("কমেন্ট মুছে ফেলা হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    fun setReportStatus(report: FirestoreReportItem, newStatus: String) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.updateReportStatus(report, newStatus)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("রিপোর্টের অবস্থা আপডেট হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    // =========================================================================
+    // ADS & SETTINGS
+    // =========================================================================
+    fun saveAdSettings(updated: AdvertisementSettingsModel) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.saveAdvertisementSettingsGlobal(updated)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("বিজ্ঞাপন সেটিংস সেভ হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    fun saveAppSettings(updated: AppGlobalSettingsModel) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.saveAppGlobalSettings(updated)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("সেটিংস সেভ হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        repository.stopRealtimeListeners()
+        try {
+            authStateListener?.let { FirebaseAuth.getInstance().removeAuthStateListener(it) }
+        } catch (_: Exception) {
         }
     }
 }
