@@ -1,31 +1,96 @@
-name: Build Debug APK
+name: Build PromptAdmin
+
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
   workflow_dispatch:
+    inputs:
+      build_release:
+        description: "Also build the signed release AAB + APK"
+        type: boolean
+        default: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 45
 
-      - uses: actions/setup-java@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 9.3.1
+          gradle-version: "9.3.1"
 
       - name: Check google-services.json
-        run: test -f app/google-services.json && echo "found"
+        run: |
+          if [ ! -f app/google-services.json ]; then
+            echo "::warning::app/google-services.json is missing. Upload it into the app/ folder."
+          fi
 
-      - name: Build
-        run: gradle assembleDebug
+      # One key for everything: debug builds are signed with the same key as release builds,
+      # so the SHA fingerprints in Firebase never change.
+      - name: Prepare signing key
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ]; then
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+            keytool -importkeystore -noprompt \
+              -srckeystore "$RUNNER_TEMP/upload.jks" -srcstorepass "$STORE_PASSWORD" \
+              -srcalias upload -srckeypass "${KEY_PASSWORD:-$STORE_PASSWORD}" \
+              -destkeystore debug.keystore -deststorepass android -destkeypass android \
+              -destalias androiddebugkey -deststoretype PKCS12
+          else
+            echo "::warning::Signing secrets are missing. A temporary key is used, so SHA fingerprints will change on every run."
+            keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          echo "---- FINGERPRINTS (add these to Firebase) ----"
+          keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E "SHA1|SHA256"
 
-      - uses: actions/upload-artifact@v4
+      - name: Build debug APK
+        run: gradle assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
         with:
-          name: app-debug
+          name: promptadmin-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+
+      - name: Build signed release AAB and APK
+        if: ${{ github.event.inputs.build_release == 'true' }}
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_PATH" ]; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 and STORE_PASSWORD secrets are required for a release build."
+            exit 1
+          fi
+          gradle bundleRelease assembleRelease --stacktrace
+
+      - name: Upload release files
+        if: ${{ github.event.inputs.build_release == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptadmin-release
+          path: |
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/apk/release/*.apk
+          retention-days: 7
