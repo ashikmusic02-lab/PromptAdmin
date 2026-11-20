@@ -206,8 +206,9 @@ fun CommentsAndReportsScreen(
                                 ) {
                                     OutlinedTextField(
                                         value = replyDraft,
-                                        onValueChange = { replyDraft = it },
+                                        onValueChange = { if (it.length <= 500) replyDraft = it },
                                         label = { Text("অ্যাডমিনের উত্তর লিখুন") },
+                                        supportingText = { Text("${replyDraft.length} / 500") },
                                         minLines = 2,
                                         maxLines = 4,
                                         enabled = !isSubmitting,
@@ -246,7 +247,17 @@ fun CommentsAndReportsScreen(
                                                 contentColor = TextPrimary
                                             )
                                         ) {
-                                            Text("উত্তর সেভ করুন")
+                                            if (isSubmitting) {
+                                                androidx.compose.material3.CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    color = TextPrimary,
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("সেভ হচ্ছে...")
+                                            } else {
+                                                Text("উত্তর সেভ করুন")
+                                            }
                                         }
                                     }
                                 }

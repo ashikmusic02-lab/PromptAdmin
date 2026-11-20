@@ -85,9 +85,10 @@ import com.example.ui.screens.CategoriesScreen
 import com.example.ui.screens.CommentsAndReportsScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.FullScreenImageForm
+import com.example.ui.screens.FullScreenNotificationForm
 import com.example.ui.screens.ImagesScreen
 import com.example.ui.screens.NotAdminScreen
-import com.example.ui.screens.NotificationHelperScreen
+import com.example.ui.screens.NotificationsScreen
 import com.example.ui.screens.SplashLoadingScreen
 import com.example.ui.theme.CharcoalSurface
 import com.example.ui.theme.GraphiteBorder
@@ -151,6 +152,12 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
     val loadedPromptText by viewModel.loadedPromptText.collectAsStateWithLifecycle()
     val isLoadingPrompt by viewModel.isLoadingPrompt.collectAsStateWithLifecycle()
     val isImageSaving by viewModel.isImageSaving.collectAsStateWithLifecycle()
+
+    val isNotificationFormOpen by viewModel.isNotificationFormOpen.collectAsStateWithLifecycle()
+    val editingNotification by viewModel.editingNotification.collectAsStateWithLifecycle()
+    val isNotificationSaving by viewModel.isNotificationSaving.collectAsStateWithLifecycle()
+    val oneSignalHelperNotification by viewModel.oneSignalHelperNotification.collectAsStateWithLifecycle()
+
     val isActionSubmitting by viewModel.isActionSubmitting.collectAsStateWithLifecycle()
 
     val dashboardCounts by viewModel.dashboardCounts.collectAsStateWithLifecycle()
@@ -158,6 +165,7 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val comments by viewModel.comments.collectAsStateWithLifecycle()
     val reports by viewModel.reports.collectAsStateWithLifecycle()
+    val notifications by viewModel.notifications.collectAsStateWithLifecycle()
     val adSettings by viewModel.adSettings.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
     val isLoadingData by viewModel.isLoadingData.collectAsStateWithLifecycle()
@@ -219,6 +227,40 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                         },
                         onShowMessage = { msg ->
                             viewModel.showMessage(msg, isError = false)
+                        }
+                    )
+
+                    if (snackbarMessage != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(16.dp)
+                        ) {
+                            BanglaFeedbackBanner(
+                                message = snackbarMessage ?: "",
+                                isError = isErrorSnackbar,
+                                onDismiss = { viewModel.dismissMessage() }
+                            )
+                        }
+                    }
+                }
+            } else if (isNotificationFormOpen) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    FullScreenNotificationForm(
+                        editingNotification = editingNotification,
+                        images = images,
+                        isSaving = isNotificationSaving,
+                        onClose = { viewModel.closeNotificationForm() },
+                        onSave = { selectedPost, fallbackImageId, fallbackImageUrl, fallbackCategoryName, title, body, status ->
+                            viewModel.saveNotificationFromForm(
+                                selectedPost = selectedPost,
+                                fallbackImageId = fallbackImageId,
+                                fallbackImageUrl = fallbackImageUrl,
+                                fallbackCategoryName = fallbackCategoryName,
+                                title = title,
+                                body = body,
+                                status = status
+                            )
                         }
                     )
 
@@ -417,7 +459,8 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                                     AdminSection.DASHBOARD,
                                     AdminSection.IMAGES,
                                     AdminSection.CATEGORIES,
-                                    AdminSection.COMMENTS_REPORTS
+                                    AdminSection.COMMENTS_REPORTS,
+                                    AdminSection.NOTIFICATION_HELPER
                                 )
                                 NavigationBar(
                                     containerColor = CharcoalSurface,
@@ -524,8 +567,23 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                                     )
                                 }
                                 AdminSection.NOTIFICATION_HELPER -> {
-                                    NotificationHelperScreen(
-                                        images = images,
+                                    NotificationsScreen(
+                                        notifications = notifications,
+                                        oneSignalHelperItem = oneSignalHelperNotification,
+                                        isSubmitting = isActionSubmitting,
+                                        onOpenNewNotificationForm = { viewModel.openNewNotificationForm() },
+                                        onOpenEditNotificationForm = { item ->
+                                            viewModel.openEditNotificationForm(item)
+                                        },
+                                        onDeleteNotification = { item ->
+                                            viewModel.deleteNotificationConfirmed(item)
+                                        },
+                                        onSelectForOneSignalHelper = { item ->
+                                            viewModel.showOneSignalHelperFor(item)
+                                        },
+                                        onDismissOneSignalHelper = {
+                                            viewModel.dismissOneSignalHelper()
+                                        },
                                         onShowMessage = { msg ->
                                             viewModel.showMessage(msg, isError = false)
                                         }

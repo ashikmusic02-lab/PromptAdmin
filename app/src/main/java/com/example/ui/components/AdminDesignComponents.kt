@@ -34,6 +34,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -167,6 +171,13 @@ fun StatusPill(
     }
 }
 
+private fun extractGoogleDriveFileId(url: String): String? {
+    val idMatch = Regex("""[?&]id=([a-zA-Z0-9_-]+)""").find(url)?.groupValues?.getOrNull(1)
+    if (!idMatch.isNullOrBlank()) return idMatch
+    val pathMatch = Regex("""drive\.google\.com/file/d/([a-zA-Z0-9_-]+)""").find(url)?.groupValues?.getOrNull(1)
+    return pathMatch?.takeIf { it.isNotBlank() }
+}
+
 /**
  * Live image preview with automatic Google Drive link normalization and Coil intrinsic aspectRatio measurement.
  * Calls [onLoadStateChanged] with `(isLoaded, aspectRatio)` where `aspectRatio` is clamped to `0.2..5.0`.
@@ -178,8 +189,14 @@ fun CoilLiveImagePreview(
     onLoadStateChanged: (isLoaded: Boolean, aspectRatio: Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val validation = UrlAndDeepLinkValidator.validatePublicImageUrl(rawImageUrl)
+    val validation = androidx.compose.runtime.remember(rawImageUrl) {
+        UrlAndDeepLinkValidator.validatePublicImageUrl(rawImageUrl)
+    }
     val context = LocalContext.current
+
+    var useDriveThumbnailFallback by androidx.compose.runtime.remember(rawImageUrl) {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
 
     LaunchedEffect(rawImageUrl) {
         if (validation !is UrlValidationResult.Valid) {
@@ -254,6 +271,31 @@ fun CoilLiveImagePreview(
                 }
             }
             is UrlValidationResult.Valid -> {
+                val driveFileId = androidx.compose.runtime.remember(validation.normalizedUrl) {
+                    extractGoogleDriveFileId(validation.normalizedUrl)
+                }
+                val activePreviewUrl = androidx.compose.runtime.remember(
+                    validation.normalizedUrl,
+                    useDriveThumbnailFallback,
+                    driveFileId
+                ) {
+                    if (useDriveThumbnailFallback && !driveFileId.isNullOrBlank()) {
+                        "https://drive.google.com/thumbnail?id=$driveFileId&sz=w1600"
+                    } else {
+                        validation.normalizedUrl
+                    }
+                }
+                val imageRequest = androidx.compose.runtime.remember(activePreviewUrl, context) {
+                    ImageRequest.Builder(context)
+                        .data(activePreviewUrl)
+                        .addHeader(
+                            "User-Agent",
+                            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                        )
+                        .crossfade(true)
+                        .build()
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -263,20 +305,10 @@ fun CoilLiveImagePreview(
                         .border(1.dp, GraphiteBorder, RoundedCornerShape(14.dp))
                 ) {
                     SubcomposeAsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(validation.normalizedUrl)
-                            .addHeader(
-                                "User-Agent",
-                                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-                            )
-                            .crossfade(true)
-                            .build(),
+                        model = imageRequest,
                         contentDescription = "ছবির প্রিভিউ",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
-                        onLoading = {
-                            onLoadStateChanged(false, 1.0)
-                        },
                         onSuccess = { state ->
                             val drawable = state.result.drawable
                             val w = drawable.intrinsicWidth
@@ -289,7 +321,11 @@ fun CoilLiveImagePreview(
                             onLoadStateChanged(true, ratio)
                         },
                         onError = {
-                            onLoadStateChanged(false, 1.0)
+                            if (!useDriveThumbnailFallback && !driveFileId.isNullOrBlank()) {
+                                useDriveThumbnailFallback = true
+                            } else {
+                                onLoadStateChanged(false, 1.0)
+                            }
                         },
                         loading = {
                             Box(
@@ -380,7 +416,32 @@ fun UrlThumbnailBox(
     size: Dp = 64.dp
 ) {
     val context = LocalContext.current
-    val normalized = UrlAndDeepLinkValidator.normalizePublicImageUrl(imageUrl)
+    val normalized = androidx.compose.runtime.remember(imageUrl) {
+        UrlAndDeepLinkValidator.normalizePublicImageUrl(imageUrl)
+    }
+    var useDriveThumbnailFallback by androidx.compose.runtime.remember(normalized) {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val driveFileId = androidx.compose.runtime.remember(normalized) {
+        extractGoogleDriveFileId(normalized)
+    }
+    val activeUrl = androidx.compose.runtime.remember(normalized, useDriveThumbnailFallback, driveFileId) {
+        if (useDriveThumbnailFallback && !driveFileId.isNullOrBlank()) {
+            "https://drive.google.com/thumbnail?id=$driveFileId&sz=w600"
+        } else {
+            normalized
+        }
+    }
+    val imageRequest = androidx.compose.runtime.remember(activeUrl, context) {
+        ImageRequest.Builder(context)
+            .data(activeUrl)
+            .addHeader(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            )
+            .crossfade(true)
+            .build()
+    }
     Box(
         modifier = Modifier
             .size(size)
@@ -390,17 +451,15 @@ fun UrlThumbnailBox(
         contentAlignment = Alignment.Center
     ) {
         SubcomposeAsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(normalized)
-                .addHeader(
-                    "User-Agent",
-                    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-                )
-                .crossfade(true)
-                .build(),
+            model = imageRequest,
             contentDescription = "ছবি",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
+            onError = {
+                if (!useDriveThumbnailFallback && !driveFileId.isNullOrBlank()) {
+                    useDriveThumbnailFallback = true
+                }
+            },
             loading = {
                 CircularProgressIndicator(
                     modifier = Modifier.size(18.dp),

@@ -14,6 +14,7 @@ import com.example.model.DashboardCounts
 import com.example.model.FirestoreCategoryItem
 import com.example.model.FirestoreCommentItem
 import com.example.model.FirestoreImageItem
+import com.example.model.FirestoreNotificationItem
 import com.example.model.FirestoreReportItem
 import com.example.util.UrlAndDeepLinkValidator
 import com.google.firebase.FirebaseApp
@@ -71,10 +72,28 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _isActionSubmitting = MutableStateFlow(false)
     val isActionSubmitting: StateFlow<Boolean> = _isActionSubmitting.asStateFlow()
 
+    // Full-screen Notification Add/Edit Form state
+    private val _isNotificationFormOpen = MutableStateFlow(false)
+    val isNotificationFormOpen: StateFlow<Boolean> = _isNotificationFormOpen.asStateFlow()
+
+    private val _editingNotification = MutableStateFlow<FirestoreNotificationItem?>(null)
+    val editingNotification: StateFlow<FirestoreNotificationItem?> = _editingNotification.asStateFlow()
+
+    private val _activeNotificationDocId = MutableStateFlow("")
+    val activeNotificationDocId: StateFlow<String> = _activeNotificationDocId.asStateFlow()
+
+    private val _isNotificationSaving = MutableStateFlow(false)
+    val isNotificationSaving: StateFlow<Boolean> = _isNotificationSaving.asStateFlow()
+
+    // Shown after a successful notification save so the admin can copy values to OneSignal
+    private val _oneSignalHelperNotification = MutableStateFlow<FirestoreNotificationItem?>(null)
+    val oneSignalHelperNotification: StateFlow<FirestoreNotificationItem?> = _oneSignalHelperNotification.asStateFlow()
+
     val images: StateFlow<List<FirestoreImageItem>> = repository.images
     val categories: StateFlow<List<FirestoreCategoryItem>> = repository.categories
     val comments: StateFlow<List<FirestoreCommentItem>> = repository.comments
     val reports: StateFlow<List<FirestoreReportItem>> = repository.reports
+    val notifications: StateFlow<List<FirestoreNotificationItem>> = repository.notifications
     val adSettings: StateFlow<AdvertisementSettingsModel> = repository.adSettings
     val appSettings: StateFlow<AppGlobalSettingsModel> = repository.appSettings
     val isLoadingData: StateFlow<Boolean> = repository.isLoadingData
@@ -100,6 +119,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DashboardCounts())
 
     private var authStateListener: FirebaseAuth.AuthStateListener? = null
+    private var verifyingUidInFlight: String? = null
 
     init {
         observeFirebaseAuthState(application)
@@ -115,11 +135,13 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
                 val user = firebaseAuth.currentUser
                 if (user == null) {
+                    verifyingUidInFlight = null
                     repository.stopRealtimeListeners()
                     _isImageFormOpen.value = false
+                    _isNotificationFormOpen.value = false
                     _authState.value = AuthUiState.Unauthenticated
                 } else {
-                    verifySignedInUser(user)
+                    verifySignedInUser(user, force = false)
                 }
             }
             authStateListener = listener
@@ -129,10 +151,21 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun verifySignedInUser(user: FirebaseUser) {
+    private fun verifySignedInUser(user: FirebaseUser, force: Boolean = false) {
+        if (!force) {
+            val current = _authState.value
+            if (verifyingUidInFlight == user.uid) return
+            if (current is AuthUiState.Authorized && current.uid == user.uid) return
+        }
+        verifyingUidInFlight = user.uid
         _authState.value = AuthUiState.Loading
         viewModelScope.launch {
-            val res = repository.verifyAdminUserFromFirestore(user.uid)
+            val res = repository.verifyAdminUserFromFirestore(
+                uid = user.uid,
+                email = user.email,
+                isEmailVerified = user.isEmailVerified
+            )
+            verifyingUidInFlight = null
             res.onSuccess { role ->
                 if (role != null) {
                     val email = user.email.orEmpty()
@@ -176,7 +209,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val user = FirebaseAuth.getInstance().currentUser
             if (user != null) {
-                verifySignedInUser(user)
+                verifySignedInUser(user, force = true)
             } else {
                 _authState.value = AuthUiState.Unauthenticated
             }
@@ -191,7 +224,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         _authErrorMessage.value = null
-        verifySignedInUser(user)
+        verifySignedInUser(user, force = false)
     }
 
     fun setAuthErrorMessage(message: String?) {
@@ -214,6 +247,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         _isImageFormOpen.value = false
+        _isNotificationFormOpen.value = false
         _currentSection.value = section
     }
 
@@ -223,6 +257,8 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     fun signOutConfirmed() {
         repository.stopRealtimeListeners()
         _isImageFormOpen.value = false
+        _isNotificationFormOpen.value = false
+        _oneSignalHelperNotification.value = null
         try {
             if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
                 FirebaseAuth.getInstance().signOut()
@@ -307,8 +343,9 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             showMessage("ছবির লিংক দিন", isError = true)
             return
         }
-        if (!isImagePreviewLoaded) {
-            showMessage("এই লিংকে ছবি খোলা যাচ্ছে না। ছবিটি পাবলিক কিনা দেখুন", isError = true)
+        val urlValidation = UrlAndDeepLinkValidator.validatePublicImageUrl(rawImageUrl)
+        if (urlValidation is com.example.util.UrlValidationResult.Invalid) {
+            showMessage(urlValidation.reason, isError = true)
             return
         }
         val cleanTitle = title.trim()
@@ -486,12 +523,21 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
 
     fun replyToComment(comment: FirestoreCommentItem, replyText: String, onDone: () -> Unit = {}) {
         if (_isActionSubmitting.value) return
+        val cleanReply = replyText.trim()
+        if (cleanReply.isEmpty()) {
+            showMessage("উত্তর লিখুন", isError = true)
+            return
+        }
+        if (cleanReply.length > 500) {
+            showMessage("উত্তর সর্বোচ্চ ৫০০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
         _isActionSubmitting.value = true
         viewModelScope.launch {
-            val res = repository.saveCommentAdminReply(comment, replyText)
+            val res = repository.saveCommentAdminReply(comment, cleanReply)
             _isActionSubmitting.value = false
             res.onSuccess {
-                showMessage("উত্তর সেভ হয়েছে", isError = false)
+                showMessage("সেভ হয়েছে", isError = false)
                 onDone()
             }.onFailure { err ->
                 showMessage(repository.mapErrorToBangla(err), isError = true)
@@ -521,6 +567,144 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             _isActionSubmitting.value = false
             res.onSuccess {
                 showMessage("রিপোর্টের অবস্থা আপডেট হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    // =========================================================================
+    // FULL-SCREEN NOTIFICATION ADD / EDIT FORM & ONESIGNAL HELPER
+    // =========================================================================
+    fun openNewNotificationForm() {
+        val currentAuth = _authState.value
+        if (currentAuth is AuthUiState.Authorized && !currentAuth.role.canManageContent) {
+            showMessage("অনুমতি নেই / ডাটা নিয়মের সাথে মেলেনি", isError = true)
+            return
+        }
+        // Generate the document ID ONCE when the form opens
+        _activeNotificationDocId.value = repository.generateNewNotificationDocumentId()
+        _editingNotification.value = null
+        _isNotificationSaving.value = false
+        _isNotificationFormOpen.value = true
+        _currentSection.value = AdminSection.NOTIFICATION_HELPER
+    }
+
+    fun openEditNotificationForm(notification: FirestoreNotificationItem) {
+        val currentAuth = _authState.value
+        if (currentAuth is AuthUiState.Authorized && !currentAuth.role.canManageContent) {
+            showMessage("অনুমতি নেই / ডাটা নিয়মের সাথে মেলেনি", isError = true)
+            return
+        }
+        _activeNotificationDocId.value = notification.id
+        _editingNotification.value = notification
+        _isNotificationSaving.value = false
+        _isNotificationFormOpen.value = true
+        _currentSection.value = AdminSection.NOTIFICATION_HELPER
+    }
+
+    fun closeNotificationForm() {
+        if (_isNotificationSaving.value) return
+        _isNotificationFormOpen.value = false
+        _editingNotification.value = null
+    }
+
+    fun showOneSignalHelperFor(notification: FirestoreNotificationItem) {
+        _oneSignalHelperNotification.value = notification
+    }
+
+    fun dismissOneSignalHelper() {
+        _oneSignalHelperNotification.value = null
+    }
+
+    /**
+     * Single-submit server-confirmed notification save (`notifications/{id}`).
+     * Writes EXACTLY: title, body, imageId, imageUrl, categoryName, status, createdAt (on create),
+     * or updates ONLY: title, body, imageId, imageUrl, categoryName, status (on edit).
+     */
+    fun saveNotificationFromForm(
+        selectedPost: FirestoreImageItem?,
+        fallbackImageId: String,
+        fallbackImageUrl: String,
+        fallbackCategoryName: String,
+        title: String,
+        body: String,
+        status: String
+    ) {
+        if (_isNotificationSaving.value) return
+
+        val finalImageId = selectedPost?.id?.trim().orEmpty().ifEmpty { fallbackImageId.trim() }
+        val finalImageUrl = selectedPost?.imageUrl?.trim().orEmpty().ifEmpty { fallbackImageUrl.trim() }
+        val finalCategoryName = selectedPost?.categoryName?.trim().orEmpty()
+            .ifEmpty { fallbackCategoryName.trim() }
+            .ifEmpty { "অন্যান্য" }
+
+        if (finalImageId.isEmpty() || finalImageUrl.isEmpty()) {
+            showMessage("তালিকা থেকে একটি ছবি নির্বাচন করুন", isError = true)
+            return
+        }
+
+        val cleanTitle = title.trim()
+        if (cleanTitle.isEmpty()) {
+            showMessage("শিরোনাম লিখুন", isError = true)
+            return
+        }
+        if (cleanTitle.length > 120) {
+            showMessage("শিরোনাম সর্বোচ্চ ১২০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
+
+        val cleanBody = body.trim()
+        if (cleanBody.isEmpty()) {
+            showMessage("বার্তা লিখুন", isError = true)
+            return
+        }
+        if (cleanBody.length > 500) {
+            showMessage("বার্তা সর্বোচ্চ ৫০০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
+
+        val editing = _editingNotification.value
+        val docId = _activeNotificationDocId.value.ifBlank {
+            editing?.id ?: repository.generateNewNotificationDocumentId()
+        }
+        _activeNotificationDocId.value = docId
+
+        _isNotificationSaving.value = true
+        viewModelScope.launch {
+            val res = repository.saveNotificationAtomic(
+                documentId = docId,
+                isEdit = editing != null,
+                title = cleanTitle,
+                body = cleanBody,
+                imageId = finalImageId,
+                imageUrl = finalImageUrl,
+                categoryName = finalCategoryName,
+                status = if (status.equals("draft", ignoreCase = true)) "draft" else "published"
+            )
+            _isNotificationSaving.value = false
+            res.onSuccess { savedItem ->
+                _isNotificationFormOpen.value = false
+                _editingNotification.value = null
+                _oneSignalHelperNotification.value = savedItem
+                showMessage("সেভ হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    fun deleteNotificationConfirmed(notification: FirestoreNotificationItem) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.deleteNotificationAtomic(notification)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                if (_oneSignalHelperNotification.value?.id == notification.id) {
+                    _oneSignalHelperNotification.value = null
+                }
+                showMessage("নোটিফিকেশন মুছে ফেলা হয়েছে", isError = false)
             }.onFailure { err ->
                 showMessage(repository.mapErrorToBangla(err), isError = true)
             }

@@ -173,7 +173,7 @@ fun DashboardScreen(
                     border = BorderStroke(1.dp, GraphiteBorder),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(text = "নোটিফিকেশন সহায়ক", color = TextPrimary)
+                    Text(text = "নোটিফিকেশন", color = TextPrimary)
                 }
             }
         }

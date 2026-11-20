@@ -487,7 +487,7 @@ fun FullScreenImageForm(
     }
 
     var isImagePreviewLoaded by remember(editingImage?.id) {
-        mutableStateOf(false)
+        mutableStateOf(editingImage != null && editingImage.imageUrl.isNotBlank())
     }
     var measuredAspectRatio by remember(editingImage?.id) {
         mutableDoubleStateOf(editingImage?.aspectRatio ?: 1.0)

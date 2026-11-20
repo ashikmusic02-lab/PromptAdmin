@@ -10,7 +10,7 @@ enum class AdminSection(val titleBangla: String) {
     IMAGES("ছবি"),
     CATEGORIES("ক্যাটাগরি"),
     COMMENTS_REPORTS("কমেন্ট ও রিপোর্ট"),
-    NOTIFICATION_HELPER("নোটিফিকেশন সহায়ক"),
+    NOTIFICATION_HELPER("নোটিফিকেশন"),
     ADS("বিজ্ঞাপন"),
     SETTINGS("সেটিংস")
 }
@@ -159,6 +159,22 @@ data class FirestoreReportItem(
     val updatedAt: Timestamp? = null,
     val isServerConfirmed: Boolean = true
 )
+
+@Keep
+data class FirestoreNotificationItem(
+    val id: String = "",
+    val title: String = "",
+    val body: String = "",
+    val imageId: String = "",
+    val imageUrl: String = "",
+    val categoryName: String = "অন্যান্য",
+    val status: String = "published", // "published" or "draft"
+    val createdAt: Timestamp? = null,
+    val isServerConfirmed: Boolean = true
+) {
+    val isPublished: Boolean
+        get() = status.equals("published", ignoreCase = true)
+}
 
 @Keep
 data class AdvertisementSettingsModel(

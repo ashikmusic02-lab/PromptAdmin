@@ -72,6 +72,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -411,7 +412,7 @@ private fun launchGoogleSignInOnly(
     val clientId = resolveWebClientId(context)
     val credentialManager = CredentialManager.create(context)
     val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
-    val request = GetCredentialRequest.Builder()
+    val primaryRequest = GetCredentialRequest.Builder()
         .addCredentialOption(signInOption)
         .build()
 
@@ -422,10 +423,45 @@ private fun launchGoogleSignInOnly(
                 onError("লগ ইন উইন্ডো খোলা যায়নি")
                 return@launch
             }
-            val cred = credentialManager.getCredential(activity, request).credential
+            val auth = FirebaseAuth.getInstance()
+            val cred = try {
+                credentialManager.getCredential(activity, primaryRequest).credential
+            } catch (primaryErr: Exception) {
+                if (primaryErr is GetCredentialCancellationException) {
+                    throw primaryErr
+                }
+                Log.w("Auth", "Primary GetSignInWithGoogleOption failed, trying GetGoogleIdOption fallback", primaryErr)
+                try {
+                    val fallbackOption = com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
+                        .setServerClientId(clientId)
+                        .setFilterByAuthorizedAccounts(false)
+                        .setAutoSelectEnabled(false)
+                        .build()
+                    val fallbackRequest = GetCredentialRequest.Builder()
+                        .addCredentialOption(fallbackOption)
+                        .build()
+                    credentialManager.getCredential(activity, fallbackRequest).credential
+                } catch (secondaryErr: Exception) {
+                    if (secondaryErr is GetCredentialCancellationException) {
+                        throw secondaryErr
+                    }
+                    Log.w("Auth", "CredentialManager unavailable/no local account; falling back to Firebase Google OAuthProvider", secondaryErr)
+                    val provider = OAuthProvider.newBuilder("google.com")
+                        .addCustomParameter("prompt", "select_account")
+                        .build()
+                    val pendingTask = auth.pendingAuthResult
+                    val oauthResult = if (pendingTask != null) {
+                        pendingTask.await()
+                    } else {
+                        auth.startActivityForSignInWithProvider(activity, provider).await()
+                    }
+                    onAuthenticatedUser(oauthResult.user)
+                    return@launch
+                }
+            }
+
             if (cred is CustomCredential && cred.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                 val token = GoogleIdTokenCredential.createFrom(cred.data).idToken
-                val auth = FirebaseAuth.getInstance()
                 val authResult = auth
                     .signInWithCredential(GoogleAuthProvider.getCredential(token, null))
                     .await()
@@ -437,8 +473,13 @@ private fun launchGoogleSignInOnly(
             Log.w("Auth", "Google Sign-In cancelled: ${e.message}", e)
             onCancelled()
         } catch (e: Exception) {
-            Log.e("Auth", "Google Sign-In failed", e)
-            onError("গুগল লগ ইন ব্যর্থ হয়েছে")
+            Log.e("Auth", "Google Sign-In failed: ${e.javaClass.name}: ${e.message}", e)
+            val detail = e.localizedMessage?.take(100).orEmpty()
+            if (detail.isNotEmpty()) {
+                onError("গুগল লগ ইন ব্যর্থ হয়েছে ($detail)")
+            } else {
+                onError("গুগল লগ ইন ব্যর্থ হয়েছে")
+            }
         }
     }
 }
