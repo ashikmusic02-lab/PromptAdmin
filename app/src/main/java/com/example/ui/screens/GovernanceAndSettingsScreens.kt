@@ -61,18 +61,18 @@ fun AppSettingsScreen(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
@@ -95,7 +95,7 @@ fun AppSettingsScreen(
                     )
                 }
 
-                HorizontalDivider(color = GraphiteBorder)
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.7f))
 
                 Row(
                     modifier = Modifier
@@ -122,13 +122,13 @@ fun AppSettingsScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
@@ -137,6 +137,7 @@ fun AppSettingsScreen(
                     label = { Text("স্বাগতম শিরোনাম") },
                     singleLine = true,
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -147,6 +148,7 @@ fun AppSettingsScreen(
                     minLines = 2,
                     maxLines = 4,
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -156,6 +158,7 @@ fun AppSettingsScreen(
                     label = { Text("সাপোর্ট ইমেইল") },
                     singleLine = true,
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -165,6 +168,7 @@ fun AppSettingsScreen(
                     label = { Text("প্লে স্টোর লিংক") },
                     singleLine = true,
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -192,7 +196,7 @@ fun AppSettingsScreen(
                 containerColor = VioletPrimary,
                 contentColor = TextPrimary
             ),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(50)
         ) {
             if (isSaving) {
                 CircularProgressIndicator(

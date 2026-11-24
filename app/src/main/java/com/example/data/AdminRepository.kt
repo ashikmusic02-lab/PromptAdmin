@@ -6,6 +6,7 @@ import com.example.BuildConfig
 import com.example.model.AdminRole
 import com.example.model.AdvertisementSettingsModel
 import com.example.model.AppGlobalSettingsModel
+import com.example.model.FirestoreAiToolItem
 import com.example.model.FirestoreCategoryItem
 import com.example.model.FirestoreCommentItem
 import com.example.model.FirestoreImageItem
@@ -98,6 +99,9 @@ class AdminRepository(
 
     private val _categories = MutableStateFlow<List<FirestoreCategoryItem>>(emptyList())
     val categories: StateFlow<List<FirestoreCategoryItem>> = _categories.asStateFlow()
+
+    private val _aiTools = MutableStateFlow<List<FirestoreAiToolItem>>(emptyList())
+    val aiTools: StateFlow<List<FirestoreAiToolItem>> = _aiTools.asStateFlow()
 
     private val _comments = MutableStateFlow<List<FirestoreCommentItem>>(emptyList())
     val comments: StateFlow<List<FirestoreCommentItem>> = _comments.asStateFlow()
@@ -359,6 +363,14 @@ class AdminRepository(
     }
 
     /**
+     * Generates a new Firestore document ID once when adding a new AI Tool.
+     */
+    fun generateNewAiToolDocumentId(): String {
+        return getFirestoreOrNull()?.collection("aiTools")?.document()?.id
+            ?: "tool_${UUID.randomUUID().toString().replace("-", "").take(16)}"
+    }
+
+    /**
      * Starts real-time Firestore listeners with MetadataChanges.INCLUDE so we can distinguish
      * server-confirmed snapshots from pending/cache snapshots.
      */
@@ -452,6 +464,25 @@ class AdminRepository(
                     }
                     .sortedWith(compareBy<FirestoreCategoryItem> { it.sortOrder }.thenBy { it.name })
                 _categories.value = list
+            }
+
+        // AI Tools listener (Owner & Admin) — sorted by sortOrder ascending, then name
+        activeListeners += db.collection("aiTools")
+            .addSnapshotListener(MetadataChanges.INCLUDE) { snap, err ->
+                if (err != null) {
+                    Log.e(TAG, "aiTools listener error: ${err.message}", err)
+                    onListenerError(mapErrorToBangla(err))
+                    return@addSnapshotListener
+                }
+                if (snap == null) return@addSnapshotListener
+                val snapFromCache = snap.metadata.isFromCache()
+                val list = snap.documents
+                    .mapNotNull { doc ->
+                        val confirmed = !snapFromCache && !doc.metadata.isFromCache() && !doc.metadata.hasPendingWrites()
+                        parseAiTool(doc, isServerConfirmed = confirmed)
+                    }
+                    .sortedWith(compareBy<FirestoreAiToolItem> { it.sortOrder }.thenBy { it.name })
+                _aiTools.value = list
             }
 
         // Notifications listener (Owner & Admin) — newest first
@@ -563,6 +594,24 @@ class AdminRepository(
         }
     }
 
+    private fun parseAiTool(doc: DocumentSnapshot, isServerConfirmed: Boolean): FirestoreAiToolItem? {
+        return try {
+            FirestoreAiToolItem(
+                id = doc.id,
+                name = doc.getString("name").orEmpty(),
+                url = doc.getString("url").orEmpty(),
+                logoUrl = doc.getString("logoUrl").orEmpty(),
+                enabled = doc.getBoolean("enabled") ?: true,
+                sortOrder = (doc.getLong("sortOrder") ?: 1L).toInt(),
+                updatedAt = doc.getTimestamp("updatedAt"),
+                isServerConfirmed = isServerConfirmed
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse aiTool doc ${doc.id}", e)
+            null
+        }
+    }
+
     private fun parseComment(doc: DocumentSnapshot, isServerConfirmed: Boolean): FirestoreCommentItem? {
         return try {
             val rawStatus = doc.getString("status") ?: "visible"
@@ -655,9 +704,11 @@ class AdminRepository(
             reusePreviousUnlocks = doc.getBoolean("reusePreviousUnlocks") ?: true,
             interstitialFrequency = (doc.getLong("interstitialFrequency") ?: 4L).toInt().coerceIn(1, 50),
             adFallbackMessage = doc.getString("adFallbackMessage").orEmpty(),
-            bannerAdUnitId = doc.getString("bannerAdUnitId").orEmpty(),
-            rewardedAdUnitId = doc.getString("rewardedAdUnitId").orEmpty(),
-            interstitialAdUnitId = doc.getString("interstitialAdUnitId").orEmpty()
+            bannerAdUnitId = doc.getString("bannerAdUnitId")?.trim().orEmpty(),
+            rewardedAdUnitId = doc.getString("rewardedAdUnitId")?.trim().orEmpty(),
+            interstitialAdUnitId = doc.getString("interstitialAdUnitId")?.trim().orEmpty(),
+            appOpenAdsEnabled = doc.getBoolean("appOpenAdsEnabled") ?: true,
+            appOpenAdUnitId = doc.getString("appOpenAdUnitId")?.trim().orEmpty()
         )
     }
 
@@ -1012,6 +1063,52 @@ class AdminRepository(
         }
     }
 
+    /**
+     * Quick publish/unlisted switch for an image card (`images/{id}`), waiting for server confirmation.
+     */
+    suspend fun setImagePublishedStatus(image: FirestoreImageItem, publish: Boolean): Result<Unit> {
+        val cleanStatus = if (publish) "published" else "draft"
+        return executeWithServerTimeout(
+            operationName = "setImagePublishedStatus",
+            targetPath = "images/${image.id}"
+        ) { db ->
+            val imageRef = db.collection("images").document(image.id)
+            try {
+                imageRef.update(
+                    mapOf(
+                        "status" to cleanStatus,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } catch (primaryErr: Exception) {
+                if (!isPermissionDenied(primaryErr)) throw primaryErr
+                val legacyStatus = if (publish) "PUBLISHED" else "DRAFT"
+                imageRef.update(
+                    mapOf(
+                        "status" to legacyStatus,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+
+            val confirmedItem = runCatching {
+                val serverSnap = imageRef.get(Source.SERVER).await()
+                if (serverSnap.exists()) parseImage(serverSnap, isServerConfirmed = true) else null
+            }.getOrNull() ?: image.copy(
+                status = cleanStatus,
+                updatedAt = com.google.firebase.Timestamp.now(),
+                isServerConfirmed = true
+            )
+
+            val updatedList = (_images.value.filterNot { it.id == confirmedItem.id } + confirmedItem)
+                .sortedWith(
+                    compareBy<FirestoreImageItem> { it.displayOrder }
+                        .thenByDescending { it.createdAt?.seconds ?: 0L }
+                )
+            _images.value = updatedList
+        }
+    }
+
     // =========================================================================
     // CATEGORIES (EXACT SCHEMA FIELDS: name, description: "", coverImageUrl: "",
     // imageCount (Long), sortOrder (Long), status, createdAt, updatedAt)
@@ -1019,7 +1116,8 @@ class AdminRepository(
     suspend fun saveCategoryAtomic(
         existingCategory: FirestoreCategoryItem?,
         name: String,
-        active: Boolean
+        active: Boolean,
+        customSortOrder: Int? = null
     ): Result<Unit> {
         val targetId = existingCategory?.id ?: "new_category"
         return executeWithServerTimeout(
@@ -1028,8 +1126,9 @@ class AdminRepository(
         ) { db ->
             val cleanName = name.trim()
             val statusStr = if (active) "published" else "draft"
-            val sortOrderLong = existingCategory?.sortOrder?.toLong()
-                ?: ((_categories.value.maxOfOrNull { it.sortOrder } ?: 0) + 1).toLong()
+            val sortOrderLong = (customSortOrder
+                ?: existingCategory?.sortOrder
+                ?: ((_categories.value.maxOfOrNull { it.sortOrder } ?: 0) + 1)).toLong()
 
             val docRef = if (existingCategory == null) {
                 val ref = db.collection("categories").document()
@@ -1156,6 +1255,73 @@ class AdminRepository(
     }
 
     // =========================================================================
+    // AI TOOLS (aiTools/{id} — EXACT SCHEMA FIELDS:
+    // name (string, 1-60), url (string, https://, max 500), logoUrl (string, max 500),
+    // enabled (bool), sortOrder (int/Long), updatedAt (server timestamp))
+    // =========================================================================
+    suspend fun saveAiToolAtomic(
+        documentId: String,
+        isEdit: Boolean,
+        name: String,
+        url: String,
+        logoUrl: String,
+        enabled: Boolean,
+        sortOrder: Int
+    ): Result<Unit> {
+        return executeWithServerTimeout(
+            operationName = if (isEdit) "updateAiTool" else "createAiTool",
+            targetPath = "aiTools/$documentId"
+        ) { db ->
+            val docRef = db.collection("aiTools").document(documentId)
+            val cleanName = name.trim().take(60)
+            val cleanUrl = url.trim().take(500)
+            val cleanLogoUrl = logoUrl.trim().take(500)
+            val sortOrderLong = sortOrder.toLong()
+
+            // Exact 6 fields: name, url, logoUrl, enabled, sortOrder, updatedAt
+            val payload = hashMapOf<String, Any>(
+                "name" to cleanName,
+                "url" to cleanUrl,
+                "logoUrl" to cleanLogoUrl,
+                "enabled" to enabled,
+                "sortOrder" to sortOrderLong,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+
+            docRef.set(payload).await()
+
+            val confirmedTool = runCatching {
+                val serverSnap = docRef.get(Source.SERVER).await()
+                if (serverSnap.exists()) parseAiTool(serverSnap, isServerConfirmed = true) else null
+            }.getOrNull() ?: FirestoreAiToolItem(
+                id = documentId,
+                name = cleanName,
+                url = cleanUrl,
+                logoUrl = cleanLogoUrl,
+                enabled = enabled,
+                sortOrder = sortOrder,
+                updatedAt = com.google.firebase.Timestamp.now(),
+                isServerConfirmed = true
+            )
+
+            val updatedTools = (_aiTools.value.filterNot { it.id == confirmedTool.id } + confirmedTool)
+                .sortedWith(compareBy<FirestoreAiToolItem> { it.sortOrder }.thenBy { it.name })
+            _aiTools.value = updatedTools
+        }
+    }
+
+    suspend fun deleteAiToolAtomic(tool: FirestoreAiToolItem): Result<Unit> {
+        return executeWithServerTimeout(
+            operationName = "deleteAiToolAtomic",
+            targetPath = "aiTools/${tool.id}"
+        ) { db ->
+            val docRef = db.collection("aiTools").document(tool.id)
+            docRef.delete().await()
+            _aiTools.value = _aiTools.value.filterNot { it.id == tool.id }
+        }
+    }
+
+    // =========================================================================
     // COMMENTS & REPORTS (WITH 15S TIMEOUT + SERVER ACKNOWLEDGMENT)
     // =========================================================================
     suspend fun setCommentVisibility(comment: FirestoreCommentItem, makeVisible: Boolean): Result<Unit> {
@@ -1257,6 +1423,57 @@ class AdminRepository(
             val updatedList = (_reports.value.filterNot { it.id == confirmedReport.id } + confirmedReport)
                 .sortedByDescending { it.createdAt?.seconds ?: 0L }
             _reports.value = updatedList
+        }
+    }
+
+    /**
+     * Blocks a user in `users/{userId}` (sets `blocked = true`, `status = "blocked"`, `accountStatus = "BLOCKED"`)
+     * and hides their comments in `comments`, waiting for server confirmation.
+     */
+    suspend fun blockUserAtomic(userId: String, userName: String = ""): Result<Unit> {
+        val cleanUserId = userId.trim()
+        if (cleanUserId.isEmpty()) {
+            return Result.failure(IllegalArgumentException("ব্যবহারকারীর আইডি পাওয়া যায়নি"))
+        }
+        return executeWithServerTimeout(
+            operationName = "blockUserAtomic",
+            targetPath = "users/$cleanUserId"
+        ) { db ->
+            val userRef = db.collection("users").document(cleanUserId)
+            val blockPayload = hashMapOf<String, Any>(
+                "blocked" to true,
+                "isBlocked" to true,
+                "status" to "blocked",
+                "accountStatus" to "BLOCKED",
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            if (userName.isNotBlank()) {
+                blockPayload["userName"] = userName.trim()
+            }
+            userRef.set(blockPayload, com.google.firebase.firestore.SetOptions.merge()).await()
+
+            // Best-effort hide any visible comments from this user
+            runCatching {
+                val userComments = _comments.value.filter { it.userId == cleanUserId && it.isVisible }
+                if (userComments.isNotEmpty()) {
+                    val batch = db.batch()
+                    for (cmt in userComments) {
+                        batch.update(
+                            db.collection("comments").document(cmt.id),
+                            mapOf(
+                                "status" to "hidden",
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
+                        )
+                    }
+                    batch.commit().await()
+                    _comments.value = _comments.value.map {
+                        if (it.userId == cleanUserId) it.copy(status = "hidden") else it
+                    }
+                }
+            }.onFailure { err ->
+                Log.w(TAG, "Best-effort comment hide on user block skipped: ${err.message}")
+            }
         }
     }
 
@@ -1393,7 +1610,7 @@ class AdminRepository(
     }
 
     // =========================================================================
-    // ADVERTISEMENT SETTINGS (advertisementSettings/global — EXACT 13 FIELDS)
+    // ADVERTISEMENT SETTINGS (advertisementSettings/global — EXACT 15 FIELDS)
     // =========================================================================
     suspend fun saveAdvertisementSettingsGlobal(model: AdvertisementSettingsModel): Result<Unit> {
         return executeWithServerTimeout(
@@ -1401,19 +1618,29 @@ class AdminRepository(
             targetPath = "advertisementSettings/global"
         ) { db ->
             val docRef = db.collection("advertisementSettings").document("global")
+            val cleanedModel = model.copy(
+                interstitialFrequency = model.interstitialFrequency.coerceIn(1, 50),
+                adFallbackMessage = model.adFallbackMessage.trim(),
+                bannerAdUnitId = model.bannerAdUnitId.trim().take(120),
+                rewardedAdUnitId = model.rewardedAdUnitId.trim().take(120),
+                interstitialAdUnitId = model.interstitialAdUnitId.trim().take(120),
+                appOpenAdUnitId = model.appOpenAdUnitId.trim().take(120)
+            )
             val payload = hashMapOf<String, Any>(
-                "allAdsEnabled" to model.allAdsEnabled,
-                "homeBannerEnabled" to model.homeBannerEnabled,
-                "detailBannerEnabled" to model.detailBannerEnabled,
-                "rewardedAdsEnabled" to model.rewardedAdsEnabled,
-                "interstitialAdsEnabled" to model.interstitialAdsEnabled,
-                "testAdMode" to model.testAdMode,
-                "reusePreviousUnlocks" to model.reusePreviousUnlocks,
-                "interstitialFrequency" to model.interstitialFrequency.coerceIn(1, 50).toLong(),
-                "adFallbackMessage" to model.adFallbackMessage.trim(),
-                "bannerAdUnitId" to model.bannerAdUnitId.trim(),
-                "rewardedAdUnitId" to model.rewardedAdUnitId.trim(),
-                "interstitialAdUnitId" to model.interstitialAdUnitId.trim(),
+                "allAdsEnabled" to cleanedModel.allAdsEnabled,
+                "homeBannerEnabled" to cleanedModel.homeBannerEnabled,
+                "detailBannerEnabled" to cleanedModel.detailBannerEnabled,
+                "rewardedAdsEnabled" to cleanedModel.rewardedAdsEnabled,
+                "interstitialAdsEnabled" to cleanedModel.interstitialAdsEnabled,
+                "testAdMode" to cleanedModel.testAdMode,
+                "reusePreviousUnlocks" to cleanedModel.reusePreviousUnlocks,
+                "interstitialFrequency" to cleanedModel.interstitialFrequency.toLong(),
+                "adFallbackMessage" to cleanedModel.adFallbackMessage,
+                "bannerAdUnitId" to cleanedModel.bannerAdUnitId,
+                "rewardedAdUnitId" to cleanedModel.rewardedAdUnitId,
+                "interstitialAdUnitId" to cleanedModel.interstitialAdUnitId,
+                "appOpenAdsEnabled" to cleanedModel.appOpenAdsEnabled,
+                "appOpenAdUnitId" to cleanedModel.appOpenAdUnitId,
                 "updatedAt" to FieldValue.serverTimestamp()
             )
             docRef.set(payload).await()
@@ -1421,7 +1648,7 @@ class AdminRepository(
             val updatedModel = runCatching {
                 val serverSnap = docRef.get(Source.SERVER).await()
                 if (serverSnap.exists()) parseAdSettings(serverSnap) else null
-            }.getOrNull() ?: model
+            }.getOrNull() ?: cleanedModel
             _adSettings.value = updatedModel
         }
     }

@@ -10,14 +10,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -130,6 +133,7 @@ fun NotAdminScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(ObsidianBg)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(20.dp)
             .testTag("not_admin_screen"),
         contentAlignment = Alignment.Center
@@ -139,8 +143,8 @@ fun NotAdminScreen(
                 .fillMaxWidth()
                 .widthIn(max = 480.dp),
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(20.dp)
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(26.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -198,10 +202,10 @@ fun NotAdminScreen(
                     onClick = onRetryVerification,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = 50.dp)
                         .testTag("retry_admin_check_button"),
                     border = BorderStroke(1.dp, GraphiteBorder),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(50)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
@@ -221,13 +225,13 @@ fun NotAdminScreen(
                     onClick = onSignOutClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 50.dp)
+                        .heightIn(min = 52.dp)
                         .testTag("not_admin_sign_out_button"),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = StatusRose,
                         contentColor = TextPrimary
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(50)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Logout,
@@ -261,7 +265,8 @@ fun AdminAuthScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ObsidianBg),
+            .background(ObsidianBg)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -277,8 +282,8 @@ fun AdminAuthScreen(
                     .fillMaxWidth()
                     .widthIn(max = 480.dp),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(22.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(26.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -304,7 +309,7 @@ fun AdminAuthScreen(
                     if (!externalAuthError.isNullOrBlank()) {
                         Surface(
                             color = StatusRoseBg,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(18.dp),
                             border = BorderStroke(1.dp, StatusRose),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -358,7 +363,7 @@ fun AdminAuthScreen(
                             containerColor = VioletPrimary,
                             contentColor = TextPrimary
                         ),
-                        shape = RoundedCornerShape(14.dp)
+                        shape = RoundedCornerShape(50)
                     ) {
                         if (isGoogleLoading) {
                             CircularProgressIndicator(

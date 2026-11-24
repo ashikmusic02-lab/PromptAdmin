@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CheckCircle
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Settings
@@ -80,6 +82,7 @@ import com.example.ui.components.DestructiveConfirmationDialog
 import com.example.ui.components.StatusPill
 import com.example.ui.screens.AdminAuthScreen
 import com.example.ui.screens.AdsSettingsScreen
+import com.example.ui.screens.AiToolsScreen
 import com.example.ui.screens.AppSettingsScreen
 import com.example.ui.screens.CategoriesScreen
 import com.example.ui.screens.CommentsAndReportsScreen
@@ -89,6 +92,7 @@ import com.example.ui.screens.FullScreenNotificationForm
 import com.example.ui.screens.ImagesScreen
 import com.example.ui.screens.NotAdminScreen
 import com.example.ui.screens.NotificationsScreen
+import com.example.ui.screens.PushRulesScreen
 import com.example.ui.screens.SplashLoadingScreen
 import com.example.ui.theme.CharcoalSurface
 import com.example.ui.theme.GraphiteBorder
@@ -123,8 +127,10 @@ private fun sectionIcon(section: AdminSection): ImageVector {
         AdminSection.DASHBOARD -> Icons.Default.Dashboard
         AdminSection.IMAGES -> Icons.Default.Collections
         AdminSection.CATEGORIES -> Icons.Default.Category
+        AdminSection.AI_TOOLS -> Icons.Default.AutoAwesome
         AdminSection.COMMENTS_REPORTS -> Icons.Default.Forum
         AdminSection.NOTIFICATION_HELPER -> Icons.Default.NotificationsActive
+        AdminSection.PUSH_RULES -> Icons.Default.Info
         AdminSection.ADS -> Icons.Default.Campaign
         AdminSection.SETTINGS -> Icons.Default.Settings
     }
@@ -149,6 +155,7 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
 
     val isImageFormOpen by viewModel.isImageFormOpen.collectAsStateWithLifecycle()
     val editingImage by viewModel.editingImage.collectAsStateWithLifecycle()
+    val activeFormDocumentId by viewModel.activeFormDocumentId.collectAsStateWithLifecycle()
     val loadedPromptText by viewModel.loadedPromptText.collectAsStateWithLifecycle()
     val isLoadingPrompt by viewModel.isLoadingPrompt.collectAsStateWithLifecycle()
     val isImageSaving by viewModel.isImageSaving.collectAsStateWithLifecycle()
@@ -156,13 +163,13 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
     val isNotificationFormOpen by viewModel.isNotificationFormOpen.collectAsStateWithLifecycle()
     val editingNotification by viewModel.editingNotification.collectAsStateWithLifecycle()
     val isNotificationSaving by viewModel.isNotificationSaving.collectAsStateWithLifecycle()
-    val oneSignalHelperNotification by viewModel.oneSignalHelperNotification.collectAsStateWithLifecycle()
 
     val isActionSubmitting by viewModel.isActionSubmitting.collectAsStateWithLifecycle()
 
     val dashboardCounts by viewModel.dashboardCounts.collectAsStateWithLifecycle()
     val images by viewModel.images.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val aiTools by viewModel.aiTools.collectAsStateWithLifecycle()
     val comments by viewModel.comments.collectAsStateWithLifecycle()
     val reports by viewModel.reports.collectAsStateWithLifecycle()
     val notifications by viewModel.notifications.collectAsStateWithLifecycle()
@@ -205,6 +212,7 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     FullScreenImageForm(
                         editingImage = editingImage,
+                        activeDocumentId = activeFormDocumentId,
                         loadedPromptText = loadedPromptText,
                         isLoadingPrompt = isLoadingPrompt,
                         isSaving = isImageSaving,
@@ -378,7 +386,7 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                                     .heightIn(min = 48.dp)
                                     .testTag("drawer_sign_out_button"),
                                 border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(50)
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Logout,
@@ -503,7 +511,7 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                                 .padding(innerPadding)
                                 .verticalScroll(rememberScrollState())
                                 .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             AnimatedVisibility(visible = snackbarMessage != null) {
                                 snackbarMessage?.let { msg ->
@@ -532,18 +540,58 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                                         onOpenNewImageForm = { viewModel.openNewImageForm() },
                                         onOpenEditImageForm = { img -> viewModel.openEditImageForm(img) },
                                         onDeleteImage = { img -> viewModel.deleteImageConfirmed(img) },
-                                        onMoveImageOrder = { img, up -> viewModel.moveImageOrder(img, up) }
+                                        onMoveImageOrder = { img, up -> viewModel.moveImageOrder(img, up) },
+                                        onTogglePublishedStatus = { img, publish ->
+                                            viewModel.toggleImagePublishedStatus(img, publish)
+                                        },
+                                        onShowMessage = { msg -> viewModel.showMessage(msg, isError = false) }
                                     )
                                 }
                                 AdminSection.CATEGORIES -> {
+                                    val uncategorizedCount = remember(images) {
+                                        images.count {
+                                            it.categoryId.isBlank() ||
+                                                it.categoryId == "uncategorized" ||
+                                                it.categoryName == "অন্যান্য"
+                                        }
+                                    }
                                     CategoriesScreen(
                                         categories = categories,
+                                        uncategorizedImageCount = uncategorizedCount,
                                         isSubmitting = isActionSubmitting,
-                                        onSaveCategory = { existing, name, active, onDone ->
-                                            viewModel.saveCategory(existing, name, active, onDone)
+                                        onSaveCategory = { existing, name, active, sortOrderText, onDone ->
+                                            viewModel.saveCategory(existing, name, active, sortOrderText, onDone)
                                         },
                                         onDeleteCategory = { cat ->
                                             viewModel.deleteCategoryConfirmed(cat)
+                                        }
+                                    )
+                                }
+                                AdminSection.AI_TOOLS -> {
+                                    AiToolsScreen(
+                                        aiTools = aiTools,
+                                        isSubmitting = isActionSubmitting,
+                                        onGenerateNewDocId = { viewModel.generateNewAiToolDocId() },
+                                        onSaveAiTool = { docId, isEdit, name, url, logoUrl, enabled, sortOrderText, onDone ->
+                                            viewModel.saveAiTool(
+                                                documentId = docId,
+                                                isEdit = isEdit,
+                                                name = name,
+                                                url = url,
+                                                logoUrl = logoUrl,
+                                                enabled = enabled,
+                                                sortOrderText = sortOrderText,
+                                                onSuccess = onDone
+                                            )
+                                        },
+                                        onToggleEnabled = { tool, enabled ->
+                                            viewModel.toggleAiToolEnabled(tool, enabled)
+                                        },
+                                        onUpdateSortOrder = { tool, newOrderText, onDone ->
+                                            viewModel.updateAiToolSortOrder(tool, newOrderText, onDone)
+                                        },
+                                        onDeleteAiTool = { tool ->
+                                            viewModel.deleteAiToolConfirmed(tool)
                                         }
                                     )
                                 }
@@ -563,13 +611,15 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                                         },
                                         onUpdateReportStatus = { rpt, st ->
                                             viewModel.setReportStatus(rpt, st)
+                                        },
+                                        onBlockUser = { userId, userName ->
+                                            viewModel.blockUserConfirmed(userId, userName)
                                         }
                                     )
                                 }
                                 AdminSection.NOTIFICATION_HELPER -> {
                                     NotificationsScreen(
                                         notifications = notifications,
-                                        oneSignalHelperItem = oneSignalHelperNotification,
                                         isSubmitting = isActionSubmitting,
                                         onOpenNewNotificationForm = { viewModel.openNewNotificationForm() },
                                         onOpenEditNotificationForm = { item ->
@@ -578,16 +628,13 @@ fun PromptAdminRootApp(viewModel: AdminViewModel = viewModel()) {
                                         onDeleteNotification = { item ->
                                             viewModel.deleteNotificationConfirmed(item)
                                         },
-                                        onSelectForOneSignalHelper = { item ->
-                                            viewModel.showOneSignalHelperFor(item)
-                                        },
-                                        onDismissOneSignalHelper = {
-                                            viewModel.dismissOneSignalHelper()
-                                        },
-                                        onShowMessage = { msg ->
-                                            viewModel.showMessage(msg, isError = false)
+                                        onOpenPushRules = {
+                                            viewModel.navigateTo(AdminSection.PUSH_RULES)
                                         }
                                     )
+                                }
+                                AdminSection.PUSH_RULES -> {
+                                    PushRulesScreen()
                                 }
                                 AdminSection.ADS -> {
                                     AdsSettingsScreen(
@@ -637,7 +684,7 @@ private fun BanglaFeedbackBanner(
             .fillMaxWidth()
             .testTag("feedback_banner"),
         color = if (isError) StatusRoseBg else StatusEmeraldBg,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         border = BorderStroke(
             1.dp,
             if (isError) StatusRose else StatusEmerald
@@ -646,7 +693,7 @@ private fun BanglaFeedbackBanner(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {

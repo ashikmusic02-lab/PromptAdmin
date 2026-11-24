@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -24,8 +26,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -60,9 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,7 +72,6 @@ import com.example.ui.components.EmptyDataStateCard
 import com.example.ui.components.StatusPill
 import com.example.ui.components.UrlThumbnailBox
 import com.example.ui.theme.ChampagneGold
-import com.example.ui.theme.ChampagneLight
 import com.example.ui.theme.CharcoalSurface
 import com.example.ui.theme.GraphiteBorder
 import com.example.ui.theme.GraphiteCard
@@ -100,62 +97,68 @@ private fun formatBanglaDate(timestamp: Timestamp?): String {
 
 /**
  * NOTIFICATIONS SCREEN (`নোটিফিকেশন` — collection `notifications`):
- * 1. Lists all notification documents newest first; each card shows thumbnail (`imageUrl`),
- *    title, body (2 lines), status chip (`প্রকাশিত` / `খসড়া`), date, with buttons `সম্পাদনা`
- *    and `মুছুন` (confirmation dialog).
- * 2. Shows the `"OneSignal-এ পাঠাতে"` helper card after a successful save (or when selected)
- *    with copy buttons for শিরোনাম, বার্তা, ইমেজ লিংক, ইমেজ আইডি and step-by-step instructions.
+ * Lists all notification documents newest first; each card shows thumbnail (`imageUrl`),
+ * title, body (2 lines), status chip (`প্রকাশিত` / `খসড়া`), date, with buttons `সম্পাদনা`
+ * and `মুছুন` (confirmation dialog).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NotificationsScreen(
     notifications: List<FirestoreNotificationItem>,
-    oneSignalHelperItem: FirestoreNotificationItem?,
     isSubmitting: Boolean,
     onOpenNewNotificationForm: () -> Unit,
     onOpenEditNotificationForm: (FirestoreNotificationItem) -> Unit,
     onDeleteNotification: (FirestoreNotificationItem) -> Unit,
-    onSelectForOneSignalHelper: (FirestoreNotificationItem) -> Unit,
-    onDismissOneSignalHelper: () -> Unit,
-    onShowMessage: (String) -> Unit
+    onOpenPushRules: () -> Unit = {}
 ) {
     var pendingDeleteNotification by remember { mutableStateOf<FirestoreNotificationItem?>(null) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Button(
-            onClick = onOpenNewNotificationForm,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp)
-                .testTag("add_new_notification_button"),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = VioletPrimary,
-                contentColor = TextPrimary
-            ),
-            shape = RoundedCornerShape(14.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "নতুন নোটিফিকেশন",
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "নতুন নোটিফিকেশন",
-                style = MaterialTheme.typography.titleMedium
-            )
-        }
+            Button(
+                onClick = onOpenNewNotificationForm,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 54.dp)
+                    .testTag("add_new_notification_button"),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = VioletPrimary,
+                    contentColor = TextPrimary
+                ),
+                shape = RoundedCornerShape(50)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "নতুন নোটিফিকেশন",
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "নতুন নোটিফিকেশন",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
 
-        // Helper card shown after a successful save (or when an item is selected for OneSignal)
-        oneSignalHelperItem?.let { helperItem ->
-            OneSignalPushHelperCard(
-                notification = helperItem,
-                onDismiss = onDismissOneSignalHelper,
-                onShowMessage = onShowMessage
-            )
+            OutlinedButton(
+                onClick = onOpenPushRules,
+                modifier = Modifier
+                    .heightIn(min = 54.dp)
+                    .testTag("open_push_rules_button"),
+                border = BorderStroke(1.dp, GraphiteBorder),
+                shape = RoundedCornerShape(50)
+            ) {
+                Text(
+                    text = "পুশ পাঠানোর নিয়ম",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
         }
 
         if (notifications.isEmpty()) {
@@ -173,13 +176,13 @@ fun NotificationsScreen(
                         .fillMaxWidth()
                         .testTag("notification_card_${item.id}"),
                     colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                    border = BorderStroke(1.dp, GraphiteBorder),
-                    shape = RoundedCornerShape(16.dp)
+                    border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                    shape = RoundedCornerShape(24.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
+                            .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
@@ -231,7 +234,7 @@ fun NotificationsScreen(
                             }
                         }
 
-                        HorizontalDivider(color = GraphiteBorder)
+                        HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                         FlowRow(
                             modifier = Modifier.fillMaxWidth(),
@@ -239,28 +242,11 @@ fun NotificationsScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             OutlinedButton(
-                                onClick = { onSelectForOneSignalHelper(item) },
-                                enabled = !isSubmitting,
-                                modifier = Modifier.heightIn(min = 48.dp),
-                                border = BorderStroke(1.dp, ChampagneGold.copy(alpha = 0.6f)),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "OneSignal-এ পাঠাতে",
-                                    tint = ChampagneLight,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = "OneSignal-এ পাঠাতে", color = ChampagneLight)
-                            }
-
-                            OutlinedButton(
                                 onClick = { onOpenEditNotificationForm(item) },
                                 enabled = !isSubmitting,
                                 modifier = Modifier.heightIn(min = 48.dp),
                                 border = BorderStroke(1.dp, GraphiteBorder),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(50)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
@@ -277,7 +263,7 @@ fun NotificationsScreen(
                                 enabled = !isSubmitting,
                                 modifier = Modifier.heightIn(min = 48.dp),
                                 border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(50)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
@@ -307,172 +293,66 @@ fun NotificationsScreen(
 }
 
 /**
- * Helper card titled "OneSignal-এ পাঠাতে" shown after a successful notification save.
- * Includes copy buttons for শিরোনাম, বার্তা, ইমেজ লিংক, ইমেজ আইডি and step-by-step instructions.
+ * Simple read-only help screen "পুশ পাঠানোর নিয়ম" explaining Firebase Console Messaging steps in Bangla.
  */
 @Composable
-private fun OneSignalPushHelperCard(
-    notification: FirestoreNotificationItem,
-    onDismiss: () -> Unit,
-    onShowMessage: (String) -> Unit
-) {
-    val clipboardManager = LocalClipboardManager.current
+fun PushRulesScreen() {
+    val steps = listOf(
+        "১. Firebase Console → Messaging → নতুন নোটিফিকেশন",
+        "২. শিরোনাম, লেখা, ছবির লিংক দিন",
+        "৩. টার্গেট: অ্যাপ বা টপিক \"all\"",
+        "৪. শেষ ধাপে \"Additional options\" খুলে Custom data-তে Key: link, Value: পোস্টের কপি করা লিংক দিন",
+        "৫. Publish"
+    )
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("onesignal_helper_card"),
-        colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-        border = BorderStroke(1.5.dp, ChampagneGold),
-        shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = "OneSignal-এ পাঠাতে",
-                        tint = ChampagneLight,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Text(
-                        text = "OneSignal-এ পাঠাতে",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "বন্ধ করুন",
-                        tint = TextSecondary
-                    )
-                }
-            }
-
-            Surface(
-                color = VioletContainer.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, ChampagneGold.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "OneSignal → Messages → New Push → Audience: Subscribed Users → শিরোনাম ও বার্তা পেস্ট করুন → Image-এ ইমেজ লিংক দিন → Additional Data: key = imageId, value = ${notification.imageId} → Launch URL ফাঁকা রাখুন → Send",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(14.dp)
-                )
-            }
-
-            OneSignalCopyFieldRow(
-                label = "শিরোনাম",
-                value = notification.title,
-                onCopy = {
-                    clipboardManager.setText(AnnotatedString(notification.title))
-                    onShowMessage("শিরোনাম কপি হয়েছে")
-                }
-            )
-
-            OneSignalCopyFieldRow(
-                label = "বার্তা",
-                value = notification.body,
-                onCopy = {
-                    clipboardManager.setText(AnnotatedString(notification.body))
-                    onShowMessage("বার্তা কপি হয়েছে")
-                }
-            )
-
-            OneSignalCopyFieldRow(
-                label = "ইমেজ লিংক",
-                value = notification.imageUrl,
-                onCopy = {
-                    clipboardManager.setText(AnnotatedString(notification.imageUrl))
-                    onShowMessage("ইমেজ লিংক কপি হয়েছে")
-                }
-            )
-
-            OneSignalCopyFieldRow(
-                label = "ইমেজ আইডি",
-                value = notification.imageId,
-                onCopy = {
-                    clipboardManager.setText(AnnotatedString(notification.imageId))
-                    onShowMessage("ইমেজ আইডি কপি হয়েছে")
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun OneSignalCopyFieldRow(
-    label: String,
-    value: String,
-    onCopy: () -> Unit
-) {
-    Surface(
-        color = ObsidianBg,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, GraphiteBorder),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .testTag("push_rules_card"),
+            colors = CardDefaults.cardColors(containerColor = GraphiteCard),
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ChampagneLight
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "পুশ পাঠানোর নিয়ম",
+                    style = MaterialTheme.typography.titleLarge,
                     color = TextPrimary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    fontWeight = FontWeight.Bold
                 )
-            }
 
-            OutlinedButton(
-                onClick = onCopy,
-                modifier = Modifier.heightIn(min = 48.dp),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ContentCopy,
-                    contentDescription = "$label কপি করুন",
-                    tint = TextPrimary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = label, color = TextPrimary)
+                Surface(
+                    color = VioletContainer.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, ChampagneGold.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Firebase Console → Messaging → নতুন নোটিফিকেশন → শিরোনাম, লেখা, ছবির লিংক দিন → টার্গেট: অ্যাপ বা টপিক \"all\" → শেষ ধাপে \"Additional options\" খুলে Custom data-তে Key: link, Value: পোস্টের কপি করা লিংক দিন → Publish।",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextPrimary,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
+
+                steps.forEach { step ->
+                    Text(
+                        text = step,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                }
             }
         }
     }
@@ -482,7 +362,7 @@ private fun OneSignalCopyFieldRow(
  * Full-screen Create/Edit form for `notifications/{id}`:
  * (a) Choose a post from the existing `images` collection with a searchable list showing thumbnail and title (required);
  * (b) শিরোনাম (required, max 120);
- * (c) বার্তা (required, max 500);
+ * (c) বার্তা (optional, max 500; if blank, title is used as body before saving);
  * (d) অবস্থা: two buttons "প্রকাশ করুন" (status 'published') and "খসড়া" (status 'draft').
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -541,6 +421,7 @@ fun FullScreenNotificationForm(
 
     Scaffold(
         containerColor = ObsidianBg,
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
                 title = {
@@ -583,8 +464,8 @@ fun FullScreenNotificationForm(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -602,14 +483,14 @@ fun FullScreenNotificationForm(
                     if (selectedPost != null) {
                         Surface(
                             color = VioletContainer,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             border = BorderStroke(1.dp, VioletPrimary),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(10.dp),
+                                    .padding(12.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -640,14 +521,14 @@ fun FullScreenNotificationForm(
                     } else if (editingNotification != null && editingNotification.imageId.isNotBlank()) {
                         Surface(
                             color = VioletContainer,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             border = BorderStroke(1.dp, VioletPrimary),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(10.dp),
+                                    .padding(12.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -687,6 +568,7 @@ fun FullScreenNotificationForm(
                         },
                         singleLine = true,
                         enabled = !isSaving,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("notification_post_search_input")
@@ -707,10 +589,10 @@ fun FullScreenNotificationForm(
                                 val isSelected = post.id == selectedImageId
                                 Surface(
                                     color = if (isSelected) VioletContainer else ObsidianBg,
-                                    shape = RoundedCornerShape(12.dp),
+                                    shape = RoundedCornerShape(16.dp),
                                     border = BorderStroke(
                                         1.dp,
-                                        if (isSelected) VioletPrimary else GraphiteBorder
+                                        if (isSelected) VioletPrimary else GraphiteBorder.copy(alpha = 0.7f)
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -764,12 +646,12 @@ fun FullScreenNotificationForm(
                 }
             }
 
-            // (b) শিরোনাম (required, max 120) & (c) বার্তা (required, max 500)
+            // (b) শিরোনাম (required, max 120) & (c) বার্তা (optional, max 500)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -784,6 +666,7 @@ fun FullScreenNotificationForm(
                         supportingText = { Text("${title.length} / 120") },
                         singleLine = true,
                         enabled = !isSaving,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("notification_title_input")
@@ -792,11 +675,12 @@ fun FullScreenNotificationForm(
                     OutlinedTextField(
                         value = body,
                         onValueChange = { if (it.length <= 500) body = it },
-                        label = { Text("বার্তা *") },
+                        label = { Text("বার্তা (ঐচ্ছিক)") },
                         supportingText = { Text("${body.length} / 500") },
                         minLines = 3,
                         maxLines = 7,
                         enabled = !isSaving,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("notification_body_input")
@@ -808,8 +692,8 @@ fun FullScreenNotificationForm(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -833,6 +717,7 @@ fun FullScreenNotificationForm(
                             selected = isPublishedSelected,
                             onClick = { if (!isSaving) status = "published" },
                             label = { Text("প্রকাশ করুন") },
+                            shape = RoundedCornerShape(50),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = StatusEmerald.copy(alpha = 0.25f),
                                 selectedLabelColor = StatusEmerald
@@ -846,6 +731,7 @@ fun FullScreenNotificationForm(
                             selected = !isPublishedSelected,
                             onClick = { if (!isSaving) status = "draft" },
                             label = { Text("খসড়া") },
+                            shape = RoundedCornerShape(50),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = VioletContainer,
                                 selectedLabelColor = TextPrimary
@@ -879,7 +765,7 @@ fun FullScreenNotificationForm(
                     containerColor = VioletPrimary,
                     contentColor = TextPrimary
                 ),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(50)
             ) {
                 if (isSaving) {
                     CircularProgressIndicator(
@@ -913,7 +799,7 @@ fun FullScreenNotificationForm(
                     .fillMaxWidth()
                     .heightIn(min = 48.dp),
                 border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(50)
             ) {
                 Text(text = "বাতিল", color = TextSecondary)
             }
@@ -926,9 +812,9 @@ fun FullScreenNotificationForm(
 /**
  * ADS SCREEN (`বিজ্ঞাপন` — document `advertisementSettings/global`):
  * Edit `allAdsEnabled`, `homeBannerEnabled`, `detailBannerEnabled`, `rewardedAdsEnabled`,
- * `interstitialAdsEnabled`, `testAdMode`, `reusePreviousUnlocks`, `interstitialFrequency` (1..50),
- * `adFallbackMessage`, `bannerAdUnitId`, `rewardedAdUnitId`, `interstitialAdUnitId`, `updatedAt`
- * with Bangla switches and single-submit save button.
+ * `interstitialAdsEnabled`, `appOpenAdsEnabled`, `testAdMode`, `reusePreviousUnlocks`,
+ * `interstitialFrequency` (1..50), `adFallbackMessage`, `bannerAdUnitId`, `rewardedAdUnitId`,
+ * `interstitialAdUnitId`, `appOpenAdUnitId`, `updatedAt` with Bangla switches and single-submit save button.
  */
 @Composable
 fun AdsSettingsScreen(
@@ -941,6 +827,7 @@ fun AdsSettingsScreen(
     var detailBannerEnabled by remember(settings) { mutableStateOf(settings.detailBannerEnabled) }
     var rewardedAdsEnabled by remember(settings) { mutableStateOf(settings.rewardedAdsEnabled) }
     var interstitialAdsEnabled by remember(settings) { mutableStateOf(settings.interstitialAdsEnabled) }
+    var appOpenAdsEnabled by remember(settings) { mutableStateOf(settings.appOpenAdsEnabled) }
     var testAdMode by remember(settings) { mutableStateOf(settings.testAdMode) }
     var reusePreviousUnlocks by remember(settings) { mutableStateOf(settings.reusePreviousUnlocks) }
     var interstitialFrequency by remember(settings) {
@@ -950,21 +837,22 @@ fun AdsSettingsScreen(
     var bannerAdUnitId by remember(settings) { mutableStateOf(settings.bannerAdUnitId) }
     var rewardedAdUnitId by remember(settings) { mutableStateOf(settings.rewardedAdUnitId) }
     var interstitialAdUnitId by remember(settings) { mutableStateOf(settings.interstitialAdUnitId) }
+    var appOpenAdUnitId by remember(settings) { mutableStateOf(settings.appOpenAdUnitId) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 BanglaSwitchRow(
@@ -973,7 +861,7 @@ fun AdsSettingsScreen(
                     enabled = !isSaving,
                     onCheckedChange = { allAdsEnabled = it }
                 )
-                HorizontalDivider(color = GraphiteBorder)
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                 BanglaSwitchRow(
                     label = "হোম ব্যানার বিজ্ঞাপন",
@@ -981,7 +869,7 @@ fun AdsSettingsScreen(
                     enabled = !isSaving,
                     onCheckedChange = { homeBannerEnabled = it }
                 )
-                HorizontalDivider(color = GraphiteBorder)
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                 BanglaSwitchRow(
                     label = "ছবির বিস্তারিত পেজে ব্যানার",
@@ -989,7 +877,7 @@ fun AdsSettingsScreen(
                     enabled = !isSaving,
                     onCheckedChange = { detailBannerEnabled = it }
                 )
-                HorizontalDivider(color = GraphiteBorder)
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                 BanglaSwitchRow(
                     label = "রিওয়ার্ড বিজ্ঞাপন (প্রম্পট আনলক)",
@@ -997,7 +885,7 @@ fun AdsSettingsScreen(
                     enabled = !isSaving,
                     onCheckedChange = { rewardedAdsEnabled = it }
                 )
-                HorizontalDivider(color = GraphiteBorder)
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                 BanglaSwitchRow(
                     label = "ইন্টারস্টিশিয়াল বিজ্ঞাপন",
@@ -1005,7 +893,15 @@ fun AdsSettingsScreen(
                     enabled = !isSaving,
                     onCheckedChange = { interstitialAdsEnabled = it }
                 )
-                HorizontalDivider(color = GraphiteBorder)
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
+
+                BanglaSwitchRow(
+                    label = "অ্যাপ ওপেন বিজ্ঞাপন",
+                    checked = appOpenAdsEnabled,
+                    enabled = !isSaving,
+                    onCheckedChange = { appOpenAdsEnabled = it }
+                )
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                 BanglaSwitchRow(
                     label = "টেস্ট বিজ্ঞাপন মোড",
@@ -1013,7 +909,7 @@ fun AdsSettingsScreen(
                     enabled = !isSaving,
                     onCheckedChange = { testAdMode = it }
                 )
-                HorizontalDivider(color = GraphiteBorder)
+                HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                 BanglaSwitchRow(
                     label = "আগের আনলক পুনরায় ব্যবহার",
@@ -1027,13 +923,13 @@ fun AdsSettingsScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
@@ -1054,34 +950,56 @@ fun AdsSettingsScreen(
                     onValueChange = { adFallbackMessage = it },
                     label = { Text("বিজ্ঞাপন না থাকলে বিকল্প বার্তা") },
                     enabled = !isSaving,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
                     value = bannerAdUnitId,
-                    onValueChange = { bannerAdUnitId = it },
+                    onValueChange = { if (it.length <= 120) bannerAdUnitId = it },
                     label = { Text("ব্যানার অ্যাড ইউনিট আইডি") },
                     singleLine = true,
                     enabled = !isSaving,
-                    modifier = Modifier.fillMaxWidth()
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("banner_ad_unit_id_input")
                 )
 
                 OutlinedTextField(
                     value = rewardedAdUnitId,
-                    onValueChange = { rewardedAdUnitId = it },
+                    onValueChange = { if (it.length <= 120) rewardedAdUnitId = it },
                     label = { Text("রিওয়ার্ড অ্যাড ইউনিট আইডি") },
                     singleLine = true,
                     enabled = !isSaving,
-                    modifier = Modifier.fillMaxWidth()
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("rewarded_ad_unit_id_input")
                 )
 
                 OutlinedTextField(
                     value = interstitialAdUnitId,
-                    onValueChange = { interstitialAdUnitId = it },
+                    onValueChange = { if (it.length <= 120) interstitialAdUnitId = it },
                     label = { Text("ইন্টারস্টিশিয়াল অ্যাড ইউনিট আইডি") },
                     singleLine = true,
                     enabled = !isSaving,
-                    modifier = Modifier.fillMaxWidth()
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("interstitial_ad_unit_id_input")
+                )
+
+                OutlinedTextField(
+                    value = appOpenAdUnitId,
+                    onValueChange = { if (it.length <= 120) appOpenAdUnitId = it },
+                    label = { Text("অ্যাপ ওপেন অ্যাড ইউনিট আইডি") },
+                    singleLine = true,
+                    enabled = !isSaving,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("app_open_ad_unit_id_input")
                 )
             }
         }
@@ -1099,9 +1017,11 @@ fun AdsSettingsScreen(
                         reusePreviousUnlocks = reusePreviousUnlocks,
                         interstitialFrequency = interstitialFrequency.coerceIn(1, 50),
                         adFallbackMessage = adFallbackMessage.trim(),
-                        bannerAdUnitId = bannerAdUnitId.trim(),
-                        rewardedAdUnitId = rewardedAdUnitId.trim(),
-                        interstitialAdUnitId = interstitialAdUnitId.trim()
+                        bannerAdUnitId = bannerAdUnitId.trim().take(120),
+                        rewardedAdUnitId = rewardedAdUnitId.trim().take(120),
+                        interstitialAdUnitId = interstitialAdUnitId.trim().take(120),
+                        appOpenAdsEnabled = appOpenAdsEnabled,
+                        appOpenAdUnitId = appOpenAdUnitId.trim().take(120)
                     )
                 )
             },
@@ -1114,7 +1034,7 @@ fun AdsSettingsScreen(
                 containerColor = VioletPrimary,
                 contentColor = TextPrimary
             ),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(50)
         ) {
             if (isSaving) {
                 CircularProgressIndicator(

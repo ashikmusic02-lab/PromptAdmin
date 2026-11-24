@@ -5,16 +5,20 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.google.firebase.Timestamp
 
+@Keep
 enum class AdminSection(val titleBangla: String) {
     DASHBOARD("ড্যাশবোর্ড"),
     IMAGES("ছবি"),
     CATEGORIES("ক্যাটাগরি"),
+    AI_TOOLS("এআই টুল"),
     COMMENTS_REPORTS("কমেন্ট ও রিপোর্ট"),
     NOTIFICATION_HELPER("নোটিফিকেশন"),
+    PUSH_RULES("পুশ পাঠানোর নিয়ম"),
     ADS("বিজ্ঞাপন"),
     SETTINGS("সেটিংস")
 }
 
+@Keep
 enum class AdminRole(
     val firestoreRole: String,
     val banglaBadge: String
@@ -54,14 +58,19 @@ enum class AdminRole(
     }
 }
 
+@Keep
 sealed class AuthUiState {
+    @Keep
     data object Loading : AuthUiState()
+    @Keep
     data object Unauthenticated : AuthUiState()
+    @Keep
     data class NotAdmin(
         val uid: String,
         val email: String,
         val message: String = "আপনি অ্যাডমিন নন"
     ) : AuthUiState()
+    @Keep
     data class Authorized(
         val uid: String,
         val email: String,
@@ -70,6 +79,7 @@ sealed class AuthUiState {
     ) : AuthUiState()
 }
 
+@Keep
 data class DashboardCounts(
     val totalImages: Int = 0,
     val publishedImages: Int = 0,
@@ -125,6 +135,18 @@ data class FirestoreCategoryItem(
     val isActive: Boolean
         get() = status.equals("published", ignoreCase = true)
 }
+
+@Keep
+data class FirestoreAiToolItem(
+    val id: String = "",
+    val name: String = "",
+    val url: String = "",
+    val logoUrl: String = "",
+    val enabled: Boolean = true,
+    val sortOrder: Int = 1,
+    val updatedAt: Timestamp? = null,
+    val isServerConfirmed: Boolean = true
+)
 
 @Keep
 data class FirestoreCommentItem(
@@ -189,7 +211,9 @@ data class AdvertisementSettingsModel(
     val adFallbackMessage: String = "",
     val bannerAdUnitId: String = "",
     val rewardedAdUnitId: String = "",
-    val interstitialAdUnitId: String = ""
+    val interstitialAdUnitId: String = "",
+    val appOpenAdsEnabled: Boolean = true,
+    val appOpenAdUnitId: String = ""
 )
 
 @Keep
@@ -323,8 +347,6 @@ data class AppContentSettingsEntity(
     val termsAndConditionsUrl: String = "",
     val contactEmail: String = "",
     val playStoreUrl: String = "",
-    val oneSignalAppId: String = "",
-    val oneSignalFunctionUrl: String = "",
     val adminAuthFunctionUrl: String = "",
     val requireCommentPreModeration: Boolean = true,
     val updatedByEmail: String = "",

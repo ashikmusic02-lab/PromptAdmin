@@ -11,6 +11,7 @@ import com.example.model.AdvertisementSettingsModel
 import com.example.model.AppGlobalSettingsModel
 import com.example.model.AuthUiState
 import com.example.model.DashboardCounts
+import com.example.model.FirestoreAiToolItem
 import com.example.model.FirestoreCategoryItem
 import com.example.model.FirestoreCommentItem
 import com.example.model.FirestoreImageItem
@@ -85,12 +86,9 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private val _isNotificationSaving = MutableStateFlow(false)
     val isNotificationSaving: StateFlow<Boolean> = _isNotificationSaving.asStateFlow()
 
-    // Shown after a successful notification save so the admin can copy values to OneSignal
-    private val _oneSignalHelperNotification = MutableStateFlow<FirestoreNotificationItem?>(null)
-    val oneSignalHelperNotification: StateFlow<FirestoreNotificationItem?> = _oneSignalHelperNotification.asStateFlow()
-
     val images: StateFlow<List<FirestoreImageItem>> = repository.images
     val categories: StateFlow<List<FirestoreCategoryItem>> = repository.categories
+    val aiTools: StateFlow<List<FirestoreAiToolItem>> = repository.aiTools
     val comments: StateFlow<List<FirestoreCommentItem>> = repository.comments
     val reports: StateFlow<List<FirestoreReportItem>> = repository.reports
     val notifications: StateFlow<List<FirestoreNotificationItem>> = repository.notifications
@@ -258,7 +256,6 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         repository.stopRealtimeListeners()
         _isImageFormOpen.value = false
         _isNotificationFormOpen.value = false
-        _oneSignalHelperNotification.value = null
         try {
             if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
                 FirebaseAuth.getInstance().signOut()
@@ -457,13 +454,28 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleImagePublishedStatus(image: FirestoreImageItem, publish: Boolean) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.setImagePublishedStatus(image, publish)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage(if (publish) "ছবি প্রকাশিত হয়েছে" else "ছবি অপ্রকাশিত করা হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
     // =========================================================================
     // CATEGORIES
     // =========================================================================
     fun saveCategory(
         existingCategory: FirestoreCategoryItem?,
         name: String,
-        active: Boolean,
+        active: Boolean = true,
+        sortOrderText: String = "",
         onSuccess: () -> Unit = {}
     ) {
         if (_isActionSubmitting.value) return
@@ -472,16 +484,29 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             showMessage("ক্যাটাগরির নাম লিখুন", isError = true)
             return
         }
+        val cleanSortText = sortOrderText.trim()
+        val parsedSortOrder = if (cleanSortText.isEmpty()) {
+            null
+        } else {
+            val num = cleanSortText.toIntOrNull()
+            if (num == null) {
+                showMessage("ক্রম সংখ্যা সঠিকভাবে লিখুন", isError = true)
+                return
+            }
+            num
+        }
+
         _isActionSubmitting.value = true
         viewModelScope.launch {
             val res = repository.saveCategoryAtomic(
                 existingCategory = existingCategory,
                 name = cleanName,
-                active = active
+                active = active,
+                customSortOrder = parsedSortOrder
             )
             _isActionSubmitting.value = false
             res.onSuccess {
-                showMessage("ক্যাটাগরি সেভ হয়েছে", isError = false)
+                showMessage("সেভ হয়েছে", isError = false)
                 onSuccess()
             }.onFailure { err ->
                 showMessage(repository.mapErrorToBangla(err), isError = true)
@@ -497,6 +522,146 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             _isActionSubmitting.value = false
             res.onSuccess {
                 showMessage("ক্যাটাগরি মুছে ফেলা হয়েছে। এই ক্যাটাগরির ছবিগুলো এখন 'অন্যান্য' হিসেবে থাকবে।", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    // =========================================================================
+    // AI TOOLS (collection `aiTools` — name, url, logoUrl, enabled, sortOrder, updatedAt)
+    // =========================================================================
+    fun generateNewAiToolDocId(): String = repository.generateNewAiToolDocumentId()
+
+    fun saveAiTool(
+        documentId: String,
+        isEdit: Boolean,
+        name: String,
+        url: String,
+        logoUrl: String,
+        enabled: Boolean,
+        sortOrderText: String,
+        onSuccess: () -> Unit = {}
+    ) {
+        if (_isActionSubmitting.value) return
+
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) {
+            showMessage("টুলের নাম লিখুন", isError = true)
+            return
+        }
+        if (cleanName.length > 60) {
+            showMessage("নাম সর্বোচ্চ ৬০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
+
+        val cleanUrl = url.trim()
+        if (cleanUrl.isEmpty() || !cleanUrl.startsWith("https://")) {
+            showMessage("সাইট লিংক https:// দিয়ে শুরু হতে হবে", isError = true)
+            return
+        }
+        if (cleanUrl.length > 500) {
+            showMessage("সাইট লিংক সর্বোচ্চ ৫০০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
+
+        val cleanLogoUrl = logoUrl.trim()
+        if (cleanLogoUrl.length > 500) {
+            showMessage("লোগো লিংক সর্বোচ্চ ৫০০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
+
+        val parsedSortOrder = sortOrderText.trim().toIntOrNull()
+        if (parsedSortOrder == null) {
+            showMessage("ক্রম সংখ্যা সঠিকভাবে লিখুন", isError = true)
+            return
+        }
+
+        val finalDocId = documentId.trim().ifEmpty { repository.generateNewAiToolDocumentId() }
+
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.saveAiToolAtomic(
+                documentId = finalDocId,
+                isEdit = isEdit,
+                name = cleanName,
+                url = cleanUrl,
+                logoUrl = cleanLogoUrl,
+                enabled = enabled,
+                sortOrder = parsedSortOrder
+            )
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("সেভ হয়েছে", isError = false)
+                onSuccess()
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    fun toggleAiToolEnabled(tool: FirestoreAiToolItem, newEnabled: Boolean) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.saveAiToolAtomic(
+                documentId = tool.id,
+                isEdit = true,
+                name = tool.name,
+                url = tool.url,
+                logoUrl = tool.logoUrl,
+                enabled = newEnabled,
+                sortOrder = tool.sortOrder
+            )
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("সেভ হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    fun updateAiToolSortOrder(
+        tool: FirestoreAiToolItem,
+        newSortOrderText: String,
+        onSuccess: () -> Unit = {}
+    ) {
+        if (_isActionSubmitting.value) return
+        val parsedOrder = newSortOrderText.trim().toIntOrNull()
+        if (parsedOrder == null) {
+            showMessage("ক্রম সংখ্যা সঠিকভাবে লিখুন", isError = true)
+            return
+        }
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.saveAiToolAtomic(
+                documentId = tool.id,
+                isEdit = true,
+                name = tool.name,
+                url = tool.url,
+                logoUrl = tool.logoUrl,
+                enabled = tool.enabled,
+                sortOrder = parsedOrder
+            )
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("সেভ হয়েছে", isError = false)
+                onSuccess()
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
+    fun deleteAiToolConfirmed(tool: FirestoreAiToolItem) {
+        if (_isActionSubmitting.value) return
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.deleteAiToolAtomic(tool)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("এআই টুল মুছে ফেলা হয়েছে", isError = false)
             }.onFailure { err ->
                 showMessage(repository.mapErrorToBangla(err), isError = true)
             }
@@ -573,8 +738,27 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun blockUserConfirmed(userId: String, userName: String = "") {
+        if (_isActionSubmitting.value) return
+        val cleanUserId = userId.trim()
+        if (cleanUserId.isEmpty()) {
+            showMessage("ব্যবহারকারীর আইডি পাওয়া যায়নি", isError = true)
+            return
+        }
+        _isActionSubmitting.value = true
+        viewModelScope.launch {
+            val res = repository.blockUserAtomic(cleanUserId, userName)
+            _isActionSubmitting.value = false
+            res.onSuccess {
+                showMessage("ব্যবহারকারী ব্লক করা হয়েছে", isError = false)
+            }.onFailure { err ->
+                showMessage(repository.mapErrorToBangla(err), isError = true)
+            }
+        }
+    }
+
     // =========================================================================
-    // FULL-SCREEN NOTIFICATION ADD / EDIT FORM & ONESIGNAL HELPER
+    // FULL-SCREEN NOTIFICATION ADD / EDIT FORM
     // =========================================================================
     fun openNewNotificationForm() {
         val currentAuth = _authState.value
@@ -609,18 +793,11 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         _editingNotification.value = null
     }
 
-    fun showOneSignalHelperFor(notification: FirestoreNotificationItem) {
-        _oneSignalHelperNotification.value = notification
-    }
-
-    fun dismissOneSignalHelper() {
-        _oneSignalHelperNotification.value = null
-    }
-
     /**
      * Single-submit server-confirmed notification save (`notifications/{id}`).
      * Writes EXACTLY: title, body, imageId, imageUrl, categoryName, status, createdAt (on create),
      * or updates ONLY: title, body, imageId, imageUrl, categoryName, status (on edit).
+     * Message (body) is optional in UI; if blank, uses title as body before saving.
      */
     fun saveNotificationFromForm(
         selectedPost: FirestoreImageItem?,
@@ -654,11 +831,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        val cleanBody = body.trim()
-        if (cleanBody.isEmpty()) {
-            showMessage("বার্তা লিখুন", isError = true)
-            return
-        }
+        val cleanBody = body.trim().ifEmpty { cleanTitle }
         if (cleanBody.length > 500) {
             showMessage("বার্তা সর্বোচ্চ ৫০০ অক্ষরের হতে পারে", isError = true)
             return
@@ -683,10 +856,9 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
                 status = if (status.equals("draft", ignoreCase = true)) "draft" else "published"
             )
             _isNotificationSaving.value = false
-            res.onSuccess { savedItem ->
+            res.onSuccess {
                 _isNotificationFormOpen.value = false
                 _editingNotification.value = null
-                _oneSignalHelperNotification.value = savedItem
                 showMessage("সেভ হয়েছে", isError = false)
             }.onFailure { err ->
                 showMessage(repository.mapErrorToBangla(err), isError = true)
@@ -701,9 +873,6 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             val res = repository.deleteNotificationAtomic(notification)
             _isActionSubmitting.value = false
             res.onSuccess {
-                if (_oneSignalHelperNotification.value?.id == notification.id) {
-                    _oneSignalHelperNotification.value = null
-                }
                 showMessage("নোটিফিকেশন মুছে ফেলা হয়েছে", isError = false)
             }.onFailure { err ->
                 showMessage(repository.mapErrorToBangla(err), isError = true)
@@ -716,12 +885,31 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     // =========================================================================
     fun saveAdSettings(updated: AdvertisementSettingsModel) {
         if (_isActionSubmitting.value) return
+        val bannerId = updated.bannerAdUnitId.trim()
+        val rewardedId = updated.rewardedAdUnitId.trim()
+        val interstitialId = updated.interstitialAdUnitId.trim()
+        val appOpenId = updated.appOpenAdUnitId.trim()
+
+        if (bannerId.length > 120 || rewardedId.length > 120 || interstitialId.length > 120 || appOpenId.length > 120) {
+            showMessage("অ্যাড ইউনিট আইডি সর্বোচ্চ ১২০ অক্ষরের হতে পারে", isError = true)
+            return
+        }
+
+        val cleaned = updated.copy(
+            interstitialFrequency = updated.interstitialFrequency.coerceIn(1, 50),
+            adFallbackMessage = updated.adFallbackMessage.trim(),
+            bannerAdUnitId = bannerId,
+            rewardedAdUnitId = rewardedId,
+            interstitialAdUnitId = interstitialId,
+            appOpenAdUnitId = appOpenId
+        )
+
         _isActionSubmitting.value = true
         viewModelScope.launch {
-            val res = repository.saveAdvertisementSettingsGlobal(updated)
+            val res = repository.saveAdvertisementSettingsGlobal(cleaned)
             _isActionSubmitting.value = false
             res.onSuccess {
-                showMessage("বিজ্ঞাপন সেটিংস সেভ হয়েছে", isError = false)
+                showMessage("সেভ হয়েছে", isError = false)
             }.onFailure { err ->
                 showMessage(repository.mapErrorToBangla(err), isError = true)
             }

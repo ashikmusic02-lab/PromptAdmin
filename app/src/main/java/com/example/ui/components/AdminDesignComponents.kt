@@ -88,13 +88,13 @@ fun BanglaStatCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-        border = BorderStroke(1.dp, GraphiteBorder),
-        shape = RoundedCornerShape(16.dp)
+        border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 18.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -118,10 +118,10 @@ fun BanglaStatCard(
             }
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(16.dp))
                     .background(accentColor.copy(alpha = 0.16f))
-                    .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+                    .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -214,9 +214,9 @@ fun CoilLiveImagePreview(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(height)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(20.dp))
                         .background(ObsidianBg)
-                        .border(1.dp, GraphiteBorder, RoundedCornerShape(14.dp))
+                        .border(1.dp, GraphiteBorder.copy(alpha = 0.75f), RoundedCornerShape(20.dp))
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -244,9 +244,9 @@ fun CoilLiveImagePreview(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(height)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(20.dp))
                         .background(StatusRoseBg.copy(alpha = 0.65f))
-                        .border(1.dp, StatusRose, RoundedCornerShape(14.dp))
+                        .border(1.dp, StatusRose, RoundedCornerShape(20.dp))
                         .padding(16.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -300,9 +300,9 @@ fun CoilLiveImagePreview(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(height)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(20.dp))
                         .background(ObsidianBg)
-                        .border(1.dp, GraphiteBorder, RoundedCornerShape(14.dp))
+                        .border(1.dp, GraphiteBorder.copy(alpha = 0.75f), RoundedCornerShape(20.dp))
                 ) {
                     SubcomposeAsyncImage(
                         model = imageRequest,
@@ -445,9 +445,9 @@ fun UrlThumbnailBox(
     Box(
         modifier = Modifier
             .size(size)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(ObsidianBg)
-            .border(1.dp, GraphiteBorder, RoundedCornerShape(12.dp)),
+            .border(1.dp, GraphiteBorder.copy(alpha = 0.75f), RoundedCornerShape(16.dp)),
         contentAlignment = Alignment.Center
     ) {
         SubcomposeAsyncImage(
@@ -492,6 +492,7 @@ fun DestructiveConfirmationDialog(
         containerColor = GraphiteElevated,
         titleContentColor = TextPrimary,
         textContentColor = TextSecondary,
+        shape = RoundedCornerShape(24.dp),
         title = {
             Text(
                 text = title,
@@ -516,6 +517,7 @@ fun DestructiveConfirmationDialog(
                     containerColor = StatusRose,
                     contentColor = TextPrimary
                 ),
+                shape = RoundedCornerShape(50),
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .testTag("confirm_destructive_action_button")
@@ -527,6 +529,7 @@ fun DestructiveConfirmationDialog(
             OutlinedButton(
                 onClick = onDismiss,
                 border = BorderStroke(1.dp, GraphiteBorder),
+                shape = RoundedCornerShape(50),
                 modifier = Modifier.heightIn(min = 48.dp)
             ) {
                 Text("বাতিল", color = TextSecondary)
@@ -546,8 +549,8 @@ fun EmptyDataStateCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-        border = BorderStroke(1.dp, GraphiteBorder),
-        shape = RoundedCornerShape(16.dp)
+        border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+        shape = RoundedCornerShape(24.dp)
     ) {
         Column(
             modifier = Modifier
@@ -558,7 +561,7 @@ fun EmptyDataStateCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(54.dp)
+                    .size(56.dp)
                     .clip(CircleShape)
                     .background(VioletContainer)
                     .border(1.dp, VioletPrimary.copy(alpha = 0.5f), CircleShape),
@@ -588,6 +591,7 @@ fun EmptyDataStateCard(
                 Button(
                     onClick = onActionClick,
                     modifier = Modifier.heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(50),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = VioletPrimary,
                         contentColor = TextPrimary
@@ -608,7 +612,7 @@ fun MonospaceBadge(
     Surface(
         modifier = modifier,
         color = ObsidianBg,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(50),
         border = BorderStroke(1.dp, GraphiteBorder)
     ) {
         Text(
@@ -616,7 +620,7 @@ fun MonospaceBadge(
             fontFamily = JetBrainsMonoFamily,
             style = MaterialTheme.typography.labelMedium,
             color = ChampagneLight,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
     }
 }

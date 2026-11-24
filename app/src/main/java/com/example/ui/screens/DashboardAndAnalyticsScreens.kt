@@ -52,19 +52,19 @@ fun DashboardScreen(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Button(
             onClick = onAddNewImage,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 52.dp)
+                .heightIn(min = 54.dp)
                 .testTag("dashboard_add_image_button"),
             colors = ButtonDefaults.buttonColors(
                 containerColor = VioletPrimary,
                 contentColor = TextPrimary
             ),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(50)
         ) {
             Icon(
                 imageVector = Icons.Default.AddPhotoAlternate,
@@ -93,7 +93,7 @@ fun DashboardScreen(
         )
 
         BanglaStatCard(
-            title = "আনলিস্টেড",
+            title = "অপ্রকাশিত",
             value = counts.unlistedImages.toString(),
             icon = Icons.Default.VisibilityOff,
             accentColor = StatusAmber
@@ -123,22 +123,22 @@ fun DashboardScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
                     onClick = { onNavigate(AdminSection.IMAGES) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp),
+                        .heightIn(min = 50.dp),
                     border = BorderStroke(1.dp, GraphiteBorder),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(50)
                 ) {
                     Text(text = "ছবি পরিচালনা", color = TextPrimary)
                 }
@@ -147,20 +147,32 @@ fun DashboardScreen(
                     onClick = { onNavigate(AdminSection.CATEGORIES) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp),
+                        .heightIn(min = 50.dp),
                     border = BorderStroke(1.dp, GraphiteBorder),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(50)
                 ) {
                     Text(text = "ক্যাটাগরি পরিচালনা", color = TextPrimary)
+                }
+
+                OutlinedButton(
+                    onClick = { onNavigate(AdminSection.AI_TOOLS) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 50.dp)
+                        .testTag("dashboard_ai_tools_button"),
+                    border = BorderStroke(1.dp, GraphiteBorder),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text(text = "এআই টুল", color = TextPrimary)
                 }
 
                 OutlinedButton(
                     onClick = { onNavigate(AdminSection.COMMENTS_REPORTS) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp),
+                        .heightIn(min = 50.dp),
                     border = BorderStroke(1.dp, GraphiteBorder),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(50)
                 ) {
                     Text(text = "কমেন্ট ও রিপোর্ট দেখুন", color = TextPrimary)
                 }
@@ -169,11 +181,23 @@ fun DashboardScreen(
                     onClick = { onNavigate(AdminSection.NOTIFICATION_HELPER) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp),
+                        .heightIn(min = 50.dp),
                     border = BorderStroke(1.dp, GraphiteBorder),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(50)
                 ) {
                     Text(text = "নোটিফিকেশন", color = TextPrimary)
+                }
+
+                OutlinedButton(
+                    onClick = { onNavigate(AdminSection.PUSH_RULES) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 50.dp)
+                        .testTag("dashboard_push_rules_button"),
+                    border = BorderStroke(1.dp, GraphiteBorder),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Text(text = "পুশ পাঠানোর নিয়ম", color = TextPrimary)
                 }
             }
         }

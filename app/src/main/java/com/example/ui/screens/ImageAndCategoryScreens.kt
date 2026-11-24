@@ -58,20 +58,28 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.model.FirestoreAiToolItem
 import com.example.model.FirestoreCategoryItem
 import com.example.model.FirestoreImageItem
 import com.example.ui.components.CoilLiveImagePreview
 import com.example.ui.components.DestructiveConfirmationDialog
 import com.example.ui.components.EmptyDataStateCard
 import com.example.ui.components.StatusPill
+import java.net.URI
 import com.example.ui.components.UrlThumbnailBox
 import com.example.ui.theme.CharcoalSurface
 import com.example.ui.theme.GraphiteBorder
@@ -95,8 +103,11 @@ fun ImagesScreen(
     onOpenNewImageForm: () -> Unit,
     onOpenEditImageForm: (FirestoreImageItem) -> Unit,
     onDeleteImage: (FirestoreImageItem) -> Unit,
-    onMoveImageOrder: (FirestoreImageItem, Boolean) -> Unit
+    onMoveImageOrder: (FirestoreImageItem, Boolean) -> Unit,
+    onTogglePublishedStatus: (FirestoreImageItem, Boolean) -> Unit = { _, _ -> },
+    onShowMessage: (String) -> Unit = {}
 ) {
+    val clipboardManager = LocalClipboardManager.current
     var searchQuery by remember { mutableStateOf("") }
     // Status filter: "ALL", "PUBLISHED", "UNLISTED", "CATEGORY"
     var selectedFilterTab by remember { mutableStateOf("ALL") }
@@ -122,19 +133,19 @@ fun ImagesScreen(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Button(
             onClick = onOpenNewImageForm,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 52.dp)
+                .heightIn(min = 54.dp)
                 .testTag("add_new_image_button"),
             colors = ButtonDefaults.buttonColors(
                 containerColor = VioletPrimary,
                 contentColor = TextPrimary
             ),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(50)
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
@@ -151,14 +162,14 @@ fun ImagesScreen(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
                     value = searchQuery,
@@ -175,6 +186,7 @@ fun ImagesScreen(
                         }
                     },
                     singleLine = true,
+                    shape = RoundedCornerShape(18.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("image_search_input")
@@ -187,7 +199,7 @@ fun ImagesScreen(
                     val tabs = listOf(
                         "ALL" to "সব",
                         "PUBLISHED" to "প্রকাশিত",
-                        "UNLISTED" to "আনলিস্টেড",
+                        "UNLISTED" to "অপ্রকাশিত",
                         "CATEGORY" to "ক্যাটাগরি"
                     )
                     tabs.forEach { (key, label) ->
@@ -195,6 +207,7 @@ fun ImagesScreen(
                             selected = selectedFilterTab == key,
                             onClick = { selectedFilterTab = key },
                             label = { Text(label) },
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier.heightIn(min = 48.dp)
                         )
                     }
@@ -209,19 +222,22 @@ fun ImagesScreen(
                             selected = selectedCategoryId == "ALL",
                             onClick = { selectedCategoryId = "ALL" },
                             label = { Text("সব ক্যাটাগরি") },
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier.heightIn(min = 48.dp)
                         )
                         FilterChip(
                             selected = selectedCategoryId == "uncategorized",
                             onClick = { selectedCategoryId = "uncategorized" },
                             label = { Text("অন্যান্য") },
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier.heightIn(min = 48.dp)
                         )
                         categories.forEach { cat ->
                             FilterChip(
                                 selected = selectedCategoryId == cat.id,
                                 onClick = { selectedCategoryId = cat.id },
-                                label = { Text(cat.name) },
+                                label = { Text(cat.name.ifBlank { "অন্যান্য" }) },
+                                shape = RoundedCornerShape(50),
                                 modifier = Modifier.heightIn(min = 48.dp)
                             )
                         }
@@ -234,8 +250,8 @@ fun ImagesScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -271,18 +287,18 @@ fun ImagesScreen(
                         .fillMaxWidth()
                         .testTag("image_card_${item.id}"),
                     colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                    border = BorderStroke(1.dp, GraphiteBorder),
-                    shape = RoundedCornerShape(16.dp)
+                    border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                    shape = RoundedCornerShape(24.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
+                            .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalAlignment = Alignment.Top
                         ) {
                             UrlThumbnailBox(imageUrl = item.imageUrl, size = 76.dp)
@@ -303,16 +319,29 @@ fun ImagesScreen(
                                 Text(
                                     text = "ক্যাটাগরি: ${item.categoryName.ifBlank { "অন্যান্য" }}",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSecondary
+                                    color = TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
 
                                 FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
+                                    if (!item.isServerConfirmed) {
+                                        StatusPill(label = "সেভ হচ্ছে…", tone = "WARNING")
+                                    }
                                     StatusPill(
-                                        label = if (item.isPublished) "প্রকাশিত" else "আনলিস্টেড",
+                                        label = if (item.isPublished) "প্রকাশিত" else "অপ্রকাশিত",
                                         tone = if (item.isPublished) "PUBLISHED" else "UNLISTED"
+                                    )
+                                    StatusPill(
+                                        label = "ভিউ: ${item.viewCount}",
+                                        tone = "NEUTRAL"
+                                    )
+                                    StatusPill(
+                                        label = "লাইক: ${item.likeCount}",
+                                        tone = "NEUTRAL"
                                     )
                                     if (item.featured) {
                                         StatusPill(label = "ফিচার্ড", tone = "FEATURED")
@@ -324,7 +353,31 @@ fun ImagesScreen(
                             }
                         }
 
-                        HorizontalDivider(color = GraphiteBorder)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (item.isPublished) "অবস্থা: প্রকাশিত" else "অবস্থা: অপ্রকাশিত",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = TextSecondary
+                            )
+                            Switch(
+                                checked = item.isPublished,
+                                onCheckedChange = { publish ->
+                                    if (!isSubmitting) {
+                                        onTogglePublishedStatus(item, publish)
+                                    }
+                                },
+                                enabled = !isSubmitting,
+                                modifier = Modifier.testTag("quick_publish_switch_${item.id}")
+                            )
+                        }
+
+                        HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.7f))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -359,16 +412,40 @@ fun ImagesScreen(
                                 }
                             }
 
-                            Row(
+                            FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        clipboardManager.setText(
+                                            AnnotatedString("promptlens://image/${item.id}")
+                                        )
+                                        onShowMessage("লিংক কপি হয়েছে")
+                                    },
+                                    enabled = !isSubmitting,
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("copy_image_link_${item.id}"),
+                                    border = BorderStroke(1.dp, GraphiteBorder),
+                                    shape = RoundedCornerShape(50)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "লিংক কপি",
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = "লিংক কপি", color = TextPrimary)
+                                }
+
                                 OutlinedButton(
                                     onClick = { onOpenEditImageForm(item) },
                                     enabled = !isSubmitting,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     border = BorderStroke(1.dp, GraphiteBorder),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(50)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Edit,
@@ -385,7 +462,7 @@ fun ImagesScreen(
                                     enabled = !isSubmitting,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(50)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
@@ -430,6 +507,7 @@ fun ImagesScreen(
 @Composable
 fun FullScreenImageForm(
     editingImage: FirestoreImageItem?,
+    activeDocumentId: String = "",
     loadedPromptText: String,
     isLoadingPrompt: Boolean,
     isSaving: Boolean,
@@ -455,6 +533,7 @@ fun FullScreenImageForm(
     }
 
     val clipboardManager = LocalClipboardManager.current
+    val resolvedImageId = editingImage?.id?.ifBlank { activeDocumentId } ?: activeDocumentId
 
     var imageUrl by remember(editingImage?.id) {
         mutableStateOf(editingImage?.imageUrl ?: "")
@@ -539,18 +618,80 @@ fun FullScreenImageForm(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (editingImage != null && resolvedImageId.isNotBlank()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = GraphiteCard),
+                    border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "ছবির আইডি",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextSecondary
+                            )
+                            SelectionContainer {
+                                Text(
+                                    text = resolvedImageId,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextPrimary,
+                                    modifier = Modifier.testTag("edit_image_selectable_id")
+                                )
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                clipboardManager.setText(
+                                    AnnotatedString("promptlens://image/$resolvedImageId")
+                                )
+                                onShowMessage("লিংক কপি হয়েছে")
+                            },
+                            enabled = !isSaving,
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("edit_image_copy_link_button"),
+                            border = BorderStroke(1.dp, GraphiteBorder),
+                            shape = RoundedCornerShape(50)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "লিংক কপি",
+                                tint = TextPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "লিংক কপি", color = TextPrimary)
+                        }
+                    }
+                }
+            }
+
             // 1. ছবির লিংক (required)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedTextField(
                         value = imageUrl,
@@ -558,6 +699,7 @@ fun FullScreenImageForm(
                         label = { Text("ছবির লিংক *") },
                         singleLine = true,
                         enabled = !isSaving,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("form_image_url_input")
@@ -586,13 +728,13 @@ fun FullScreenImageForm(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedTextField(
@@ -602,6 +744,7 @@ fun FullScreenImageForm(
                         supportingText = { Text("${title.length} / 150") },
                         singleLine = true,
                         enabled = !isSaving,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("form_title_input")
@@ -615,6 +758,7 @@ fun FullScreenImageForm(
                         minLines = 2,
                         maxLines = 5,
                         enabled = !isSaving,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("form_description_input")
@@ -626,13 +770,13 @@ fun FullScreenImageForm(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
@@ -655,6 +799,7 @@ fun FullScreenImageForm(
                                 }
                             },
                             label = { Text("কোনোটি নয়") },
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier.heightIn(min = 48.dp)
                         )
 
@@ -664,10 +809,11 @@ fun FullScreenImageForm(
                                 onClick = {
                                     if (!isSaving) {
                                         selectedCategoryId = cat.id
-                                        selectedCategoryName = cat.name
+                                        selectedCategoryName = cat.name.ifBlank { "অন্যান্য" }
                                     }
                                 },
-                                label = { Text(cat.name) },
+                                label = { Text(cat.name.ifBlank { "অন্যান্য" }) },
+                                shape = RoundedCornerShape(50),
                                 modifier = Modifier.heightIn(min = 48.dp)
                             )
                         }
@@ -679,13 +825,13 @@ fun FullScreenImageForm(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
@@ -710,7 +856,7 @@ fun FullScreenImageForm(
                             enabled = promptText.isNotBlank(),
                             modifier = Modifier.heightIn(min = 48.dp),
                             border = BorderStroke(1.dp, GraphiteBorder),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(50)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
@@ -749,6 +895,7 @@ fun FullScreenImageForm(
                         minLines = 6,
                         maxLines = 14,
                         enabled = !isSaving && !isLoadingPrompt,
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("form_prompt_input")
@@ -760,13 +907,13 @@ fun FullScreenImageForm(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(
@@ -788,7 +935,7 @@ fun FullScreenImageForm(
                         )
                     }
 
-                    HorizontalDivider(color = GraphiteBorder)
+                    HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.7f))
 
                     Row(
                         modifier = Modifier
@@ -811,17 +958,17 @@ fun FullScreenImageForm(
                 }
             }
 
-            // 7. অবস্থা: two buttons, "প্রকাশ করুন" (published) and "আনলিস্টেড" (draft)
+            // 7. অবস্থা: two buttons, "প্রকাশ করুন" (published) and "অপ্রকাশিত" (draft)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(16.dp)
+                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                shape = RoundedCornerShape(24.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
@@ -840,6 +987,7 @@ fun FullScreenImageForm(
                             selected = isPublishedSelected,
                             onClick = { if (!isSaving) status = "published" },
                             label = { Text("প্রকাশ করুন") },
+                            shape = RoundedCornerShape(50),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = StatusEmerald.copy(alpha = 0.25f),
                                 selectedLabelColor = StatusEmerald
@@ -852,7 +1000,8 @@ fun FullScreenImageForm(
                         FilterChip(
                             selected = !isPublishedSelected,
                             onClick = { if (!isSaving) status = "draft" },
-                            label = { Text("আনলিস্টেড") },
+                            label = { Text("অপ্রকাশিত") },
+                            shape = RoundedCornerShape(50),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = VioletContainer,
                                 selectedLabelColor = TextPrimary
@@ -891,7 +1040,7 @@ fun FullScreenImageForm(
                     containerColor = VioletPrimary,
                     contentColor = TextPrimary
                 ),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(50)
             ) {
                 if (isSaving) {
                     CircularProgressIndicator(
@@ -925,7 +1074,7 @@ fun FullScreenImageForm(
                     .fillMaxWidth()
                     .heightIn(min = 48.dp),
                 border = BorderStroke(1.dp, GraphiteBorder),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(50)
             ) {
                 Text(text = "বাতিল", color = TextSecondary)
             }
@@ -937,43 +1086,44 @@ fun FullScreenImageForm(
 
 /**
  * CATEGORIES (collection `categories`):
- * - ONLY a name and an active toggle ("সক্রিয়"), plus hidden sortOrder (auto = next number).
- * - NO image, thumbnail, or description field in the UI.
- * - List with edit (pen) and delete (trash with confirmation) per row.
+ * - Name only + optional reorder number (`sortOrder`).
+ * - Safe handling of the blank / "অন্যান্য" category.
+ * - List with edit and delete (with confirmation dialog).
  * - Deleting a category does NOT delete images; warns that those images become "অন্যান্য".
  */
 @Composable
 fun CategoriesScreen(
     categories: List<FirestoreCategoryItem>,
+    uncategorizedImageCount: Int = 0,
     isSubmitting: Boolean,
-    onSaveCategory: (FirestoreCategoryItem?, String, Boolean, () -> Unit) -> Unit,
+    onSaveCategory: (FirestoreCategoryItem?, String, Boolean, String, () -> Unit) -> Unit,
     onDeleteCategory: (FirestoreCategoryItem) -> Unit
 ) {
     var editingCategory by remember { mutableStateOf<FirestoreCategoryItem?>(null) }
     var categoryName by remember { mutableStateOf("") }
-    var categoryActive by remember { mutableStateOf(true) }
+    var categorySortOrderText by remember { mutableStateOf("") }
     var pendingDeleteCategory by remember { mutableStateOf<FirestoreCategoryItem?>(null) }
 
     fun resetForm() {
         editingCategory = null
         categoryName = ""
-        categoryActive = true
+        categorySortOrderText = ""
     }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-            border = BorderStroke(1.dp, GraphiteBorder),
-            shape = RoundedCornerShape(16.dp)
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
@@ -985,33 +1135,32 @@ fun CategoriesScreen(
 
                 OutlinedTextField(
                     value = categoryName,
-                    onValueChange = { categoryName = it },
+                    onValueChange = { if (it.length <= 80) categoryName = it },
                     label = { Text("ক্যাটাগরির নাম *") },
                     singleLine = true,
                     enabled = !isSubmitting,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("category_name_input")
                 )
 
-                Row(
+                OutlinedTextField(
+                    value = categorySortOrderText,
+                    onValueChange = { input ->
+                        if (input.isEmpty() || input.all { it.isDigit() || it == '-' }) {
+                            categorySortOrderText = input
+                        }
+                    },
+                    label = { Text("ক্রম (ঐচ্ছিক)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = !isSubmitting,
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "সক্রিয়",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary
-                    )
-                    Switch(
-                        checked = categoryActive,
-                        onCheckedChange = { if (!isSubmitting) categoryActive = it },
-                        enabled = !isSubmitting
-                    )
-                }
+                        .testTag("category_sort_order_input")
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1025,7 +1174,7 @@ fun CategoriesScreen(
                                 .weight(1f)
                                 .heightIn(min = 48.dp),
                             border = BorderStroke(1.dp, GraphiteBorder),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(50)
                         ) {
                             Text(text = "বাতিল", color = TextSecondary)
                         }
@@ -1036,7 +1185,8 @@ fun CategoriesScreen(
                             onSaveCategory(
                                 editingCategory,
                                 categoryName,
-                                categoryActive
+                                editingCategory?.isActive ?: true,
+                                categorySortOrderText
                             ) {
                                 resetForm()
                             }
@@ -1044,13 +1194,13 @@ fun CategoriesScreen(
                         enabled = !isSubmitting,
                         modifier = Modifier
                             .weight(1f)
-                            .heightIn(min = 50.dp)
+                            .heightIn(min = 52.dp)
                             .testTag("save_category_button"),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = VioletPrimary,
                             contentColor = TextPrimary
                         ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(50)
                     ) {
                         if (isSubmitting) {
                             CircularProgressIndicator(
@@ -1072,6 +1222,42 @@ fun CategoriesScreen(
             }
         }
 
+        // Safe handling of the built-in blank / "অন্যান্য" category
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("category_row_uncategorized"),
+            colors = CardDefaults.cardColors(containerColor = GraphiteCard),
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(22.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "অন্যান্য",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "ডিফল্ট ক্যাটাগরি • ছবি: $uncategorizedImageCount",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+                StatusPill(label = "ডিফল্ট", tone = "NEUTRAL")
+            }
+        }
+
         if (categories.isEmpty()) {
             EmptyDataStateCard(
                 title = "কোনো ক্যাটাগরি নেই",
@@ -1080,18 +1266,20 @@ fun CategoriesScreen(
             )
         } else {
             categories.forEach { cat ->
+                val isBuiltInOther = cat.id.equals("uncategorized", ignoreCase = true) ||
+                    cat.name.trim() == "অন্যান্য"
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("category_row_${cat.id}"),
                     colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                    border = BorderStroke(1.dp, GraphiteBorder),
-                    shape = RoundedCornerShape(14.dp)
+                    border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                    shape = RoundedCornerShape(22.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1100,7 +1288,7 @@ fun CategoriesScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = cat.name,
+                                text = cat.name.ifBlank { "অন্যান্য" },
                                 style = MaterialTheme.typography.titleMedium,
                                 color = TextPrimary,
                                 fontWeight = FontWeight.SemiBold
@@ -1116,8 +1304,8 @@ fun CategoriesScreen(
                                     )
                                 }
                                 StatusPill(
-                                    label = if (cat.isActive) "সক্রিয়" else "নিষ্ক্রিয়",
-                                    tone = if (cat.isActive) "ACTIVE" else "DRAFT"
+                                    label = "ক্রম: ${cat.sortOrder}",
+                                    tone = "NEUTRAL"
                                 )
                                 Text(
                                     text = "ছবি: ${cat.imageCount}",
@@ -1134,8 +1322,8 @@ fun CategoriesScreen(
                             IconButton(
                                 onClick = {
                                     editingCategory = cat
-                                    categoryName = cat.name
-                                    categoryActive = cat.isActive
+                                    categoryName = cat.name.ifBlank { "অন্যান্য" }
+                                    categorySortOrderText = cat.sortOrder.toString()
                                 },
                                 enabled = !isSubmitting,
                                 modifier = Modifier.size(48.dp)
@@ -1147,16 +1335,18 @@ fun CategoriesScreen(
                                 )
                             }
 
-                            IconButton(
-                                onClick = { pendingDeleteCategory = cat },
-                                enabled = !isSubmitting,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "মুছুন",
-                                    tint = StatusRose
-                                )
+                            if (!isBuiltInOther) {
+                                IconButton(
+                                    onClick = { pendingDeleteCategory = cat },
+                                    enabled = !isSubmitting,
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "মুছুন",
+                                        tint = StatusRose
+                                    )
+                                }
                             }
                         }
                     }
@@ -1168,10 +1358,462 @@ fun CategoriesScreen(
     pendingDeleteCategory?.let { target ->
         DestructiveConfirmationDialog(
             title = "ক্যাটাগরি মুছে ফেলবেন?",
-            message = "'${target.name}' ক্যাটাগরি মুছে ফেলা হবে। কোনো ছবি মুছে যাবে না — এই ক্যাটাগরির ছবিগুলো 'অন্যান্য' হিসেবে থাকবে।",
+            message = "'${target.name.ifBlank { "অন্যান্য" }}' ক্যাটাগরি মুছে ফেলা হবে। কোনো ছবি মুছে যাবে না — এই ক্যাটাগরির ছবিগুলো 'অন্যান্য' হিসেবে থাকবে।",
             confirmButtonText = "মুছুন",
             onConfirm = { onDeleteCategory(target) },
             onDismiss = { pendingDeleteCategory = null }
+        )
+    }
+}
+
+private fun resolveAiToolLogoUrl(logoUrl: String, siteUrl: String): String {
+    val cleanLogo = logoUrl.trim()
+    if (cleanLogo.isNotEmpty()) return cleanLogo
+    val host = try {
+        URI(siteUrl.trim()).host?.trim().orEmpty()
+    } catch (_: Exception) {
+        ""
+    }
+    return if (host.isNotEmpty()) {
+        "https://www.google.com/s2/favicons?domain=$host&sz=128"
+    } else {
+        ""
+    }
+}
+
+/**
+ * AI TOOLS SCREEN (`এআই টুল` — collection `aiTools`):
+ * - Each document has EXACTLY: name (1-60), url (https://, max 500), logoUrl (optional, max 500),
+ *   enabled (bool), sortOrder (int), updatedAt (server timestamp).
+ * - Rounded cards with logo (or Google s2 favicon when logoUrl is empty), name, url, enabled switch.
+ * - Add, edit, delete with confirmation dialog, reorder by editing a number.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AiToolsScreen(
+    aiTools: List<FirestoreAiToolItem>,
+    isSubmitting: Boolean,
+    onGenerateNewDocId: () -> String,
+    onSaveAiTool: (
+        documentId: String,
+        isEdit: Boolean,
+        name: String,
+        url: String,
+        logoUrl: String,
+        enabled: Boolean,
+        sortOrderText: String,
+        onSuccess: () -> Unit
+    ) -> Unit,
+    onToggleEnabled: (FirestoreAiToolItem, Boolean) -> Unit,
+    onUpdateSortOrder: (FirestoreAiToolItem, String, () -> Unit) -> Unit,
+    onDeleteAiTool: (FirestoreAiToolItem) -> Unit
+) {
+    var editingTool by remember { mutableStateOf<FirestoreAiToolItem?>(null) }
+    var activeDocId by remember { mutableStateOf(onGenerateNewDocId()) }
+    var toolName by remember { mutableStateOf("") }
+    var toolUrl by remember { mutableStateOf("") }
+    var toolLogoUrl by remember { mutableStateOf("") }
+    var toolEnabled by remember { mutableStateOf(true) }
+    var toolSortOrderText by remember(aiTools.size) {
+        mutableStateOf(((aiTools.maxOfOrNull { it.sortOrder } ?: 0) + 1).toString())
+    }
+
+    var pendingDeleteTool by remember { mutableStateOf<FirestoreAiToolItem?>(null) }
+    var reorderingTool by remember { mutableStateOf<FirestoreAiToolItem?>(null) }
+    var reorderInputText by remember { mutableStateOf("") }
+
+    fun resetForm() {
+        editingTool = null
+        activeDocId = onGenerateNewDocId()
+        toolName = ""
+        toolUrl = ""
+        toolLogoUrl = ""
+        toolEnabled = true
+        toolSortOrderText = ((aiTools.maxOfOrNull { it.sortOrder } ?: 0) + 1).toString()
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = GraphiteCard),
+            border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = if (editingTool == null) "নতুন এআই টুল" else "এআই টুল সম্পাদনা",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                OutlinedTextField(
+                    value = toolName,
+                    onValueChange = { if (it.length <= 60) toolName = it },
+                    label = { Text("নাম *") },
+                    supportingText = { Text("${toolName.length} / 60") },
+                    singleLine = true,
+                    enabled = !isSubmitting,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ai_tool_name_input")
+                )
+
+                OutlinedTextField(
+                    value = toolUrl,
+                    onValueChange = { if (it.length <= 500) toolUrl = it },
+                    label = { Text("সাইট লিংক (https://) *") },
+                    singleLine = true,
+                    enabled = !isSubmitting,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ai_tool_url_input")
+                )
+
+                OutlinedTextField(
+                    value = toolLogoUrl,
+                    onValueChange = { if (it.length <= 500) toolLogoUrl = it },
+                    label = { Text("লোগো লিংক (ঐচ্ছিক)") },
+                    singleLine = true,
+                    enabled = !isSubmitting,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ai_tool_logo_input")
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = toolSortOrderText,
+                        onValueChange = { input ->
+                            if (input.isEmpty() || input.all { it.isDigit() || it == '-' }) {
+                                toolSortOrderText = input
+                            }
+                        },
+                        label = { Text("ক্রম") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        enabled = !isSubmitting,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("ai_tool_sort_order_input")
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "চালু",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary
+                        )
+                        Switch(
+                            checked = toolEnabled,
+                            onCheckedChange = { if (!isSubmitting) toolEnabled = it },
+                            enabled = !isSubmitting
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (editingTool != null) {
+                        OutlinedButton(
+                            onClick = { resetForm() },
+                            enabled = !isSubmitting,
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp),
+                            border = BorderStroke(1.dp, GraphiteBorder),
+                            shape = RoundedCornerShape(50)
+                        ) {
+                            Text(text = "বাতিল", color = TextSecondary)
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            onSaveAiTool(
+                                editingTool?.id ?: activeDocId,
+                                editingTool != null,
+                                toolName,
+                                toolUrl,
+                                toolLogoUrl,
+                                toolEnabled,
+                                toolSortOrderText
+                            ) {
+                                resetForm()
+                            }
+                        },
+                        enabled = !isSubmitting,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 52.dp)
+                            .testTag("save_ai_tool_button"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = VioletPrimary,
+                            contentColor = TextPrimary
+                        ),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        if (isSubmitting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = TextPrimary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "সেভ করুন",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "সেভ করুন")
+                        }
+                    }
+                }
+            }
+        }
+
+        if (aiTools.isEmpty()) {
+            EmptyDataStateCard(
+                title = "কোনো এআই টুল নেই",
+                message = "উপরের ফর্ম থেকে নতুন এআই টুল যোগ করুন।",
+                icon = Icons.Default.AutoAwesome
+            )
+        } else {
+            aiTools.forEach { tool ->
+                val resolvedLogo = remember(tool.logoUrl, tool.url) {
+                    resolveAiToolLogoUrl(tool.logoUrl, tool.url)
+                }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ai_tool_card_${tool.id}"),
+                    colors = CardDefaults.cardColors(containerColor = GraphiteCard),
+                    border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            UrlThumbnailBox(
+                                imageUrl = resolvedLogo,
+                                size = 56.dp
+                            )
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = tool.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = tool.url,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (!tool.isServerConfirmed) {
+                                        StatusPill(label = "সেভ হচ্ছে…", tone = "WARNING")
+                                    }
+                                    StatusPill(
+                                        label = "ক্রম: ${tool.sortOrder}",
+                                        tone = "NEUTRAL"
+                                    )
+                                }
+                            }
+
+                            Switch(
+                                checked = tool.enabled,
+                                onCheckedChange = { newEnabled ->
+                                    if (!isSubmitting) {
+                                        onToggleEnabled(tool, newEnabled)
+                                    }
+                                },
+                                enabled = !isSubmitting,
+                                modifier = Modifier.testTag("ai_tool_switch_${tool.id}")
+                            )
+                        }
+
+                        HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.7f))
+
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    reorderingTool = tool
+                                    reorderInputText = tool.sortOrder.toString()
+                                },
+                                enabled = !isSubmitting,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                border = BorderStroke(1.dp, GraphiteBorder),
+                                shape = RoundedCornerShape(50)
+                            ) {
+                                Text(text = "ক্রম: ${tool.sortOrder}", color = TextPrimary)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    editingTool = tool
+                                    activeDocId = tool.id
+                                    toolName = tool.name
+                                    toolUrl = tool.url
+                                    toolLogoUrl = tool.logoUrl
+                                    toolEnabled = tool.enabled
+                                    toolSortOrderText = tool.sortOrder.toString()
+                                },
+                                enabled = !isSubmitting,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                border = BorderStroke(1.dp, GraphiteBorder),
+                                shape = RoundedCornerShape(50)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "সম্পাদনা",
+                                    tint = TextPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(text = "সম্পাদনা", color = TextPrimary)
+                            }
+
+                            OutlinedButton(
+                                onClick = { pendingDeleteTool = tool },
+                                enabled = !isSubmitting,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
+                                shape = RoundedCornerShape(50)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "মুছুন",
+                                    tint = StatusRose,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(text = "মুছুন", color = StatusRose)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    reorderingTool?.let { target ->
+        AlertDialog(
+            onDismissRequest = { if (!isSubmitting) reorderingTool = null },
+            containerColor = GraphiteCard,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "ক্রম পরিবর্তন",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary
+                )
+            },
+            text = {
+                OutlinedTextField(
+                    value = reorderInputText,
+                    onValueChange = { input ->
+                        if (input.isEmpty() || input.all { it.isDigit() || it == '-' }) {
+                            reorderInputText = input
+                        }
+                    },
+                    label = { Text("নতুন ক্রম সংখ্যা") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = !isSubmitting,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onUpdateSortOrder(target, reorderInputText) {
+                            reorderingTool = null
+                        }
+                    },
+                    enabled = !isSubmitting,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = VioletPrimary,
+                        contentColor = TextPrimary
+                    ),
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text("সেভ করুন")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { reorderingTool = null },
+                    enabled = !isSubmitting,
+                    border = BorderStroke(1.dp, GraphiteBorder),
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text("বাতিল", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    pendingDeleteTool?.let { target ->
+        DestructiveConfirmationDialog(
+            title = "এআই টুল মুছে ফেলবেন?",
+            message = "'${target.name}' স্থায়ীভাবে মুছে ফেলা হবে।",
+            confirmButtonText = "মুছুন",
+            onConfirm = { onDeleteAiTool(target) },
+            onDismiss = { pendingDeleteTool = null }
         )
     }
 }

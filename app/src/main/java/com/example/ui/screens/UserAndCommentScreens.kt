@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.ReportProblem
@@ -24,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,17 +68,23 @@ fun CommentsAndReportsScreen(
     onToggleCommentVisibility: (FirestoreCommentItem) -> Unit,
     onReplyToComment: (FirestoreCommentItem, String, () -> Unit) -> Unit,
     onDeleteComment: (FirestoreCommentItem) -> Unit,
-    onUpdateReportStatus: (FirestoreReportItem, String) -> Unit
+    onUpdateReportStatus: (FirestoreReportItem, String) -> Unit,
+    onBlockUser: (userId: String, userName: String) -> Unit = { _, _ -> }
 ) {
     // Tab: "COMMENTS" or "REPORTS"
     var activeTab by remember { mutableStateOf("COMMENTS") }
     var replyingToCommentId by remember { mutableStateOf<String?>(null) }
     var replyDraft by remember { mutableStateOf("") }
+
+    var replyingInReportId by remember { mutableStateOf<String?>(null) }
+    var reportReplyDraft by remember { mutableStateOf("") }
+
     var pendingDeleteComment by remember { mutableStateOf<FirestoreCommentItem?>(null) }
+    var pendingBlockUser by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -86,6 +94,7 @@ fun CommentsAndReportsScreen(
                 selected = activeTab == "COMMENTS",
                 onClick = { activeTab = "COMMENTS" },
                 label = { Text("কমেন্ট (${comments.size})") },
+                shape = RoundedCornerShape(50),
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
@@ -95,6 +104,7 @@ fun CommentsAndReportsScreen(
                 selected = activeTab == "REPORTS",
                 onClick = { activeTab = "REPORTS" },
                 label = { Text("রিপোর্ট (${reports.size})") },
+                shape = RoundedCornerShape(50),
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
@@ -116,14 +126,14 @@ fun CommentsAndReportsScreen(
                             .fillMaxWidth()
                             .testTag("comment_card_${comment.id}"),
                         colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                        border = BorderStroke(1.dp, GraphiteBorder),
-                        shape = RoundedCornerShape(16.dp)
+                        border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                        shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -162,27 +172,27 @@ fun CommentsAndReportsScreen(
 
                             Surface(
                                 color = ObsidianBg,
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, GraphiteBorder),
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.7f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
                                     text = comment.text,
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = TextPrimary,
-                                    modifier = Modifier.padding(12.dp)
+                                    modifier = Modifier.padding(14.dp)
                                 )
                             }
 
                             if (comment.adminReply.isNotBlank()) {
                                 Surface(
                                     color = VioletContainer.copy(alpha = 0.55f),
-                                    shape = RoundedCornerShape(12.dp),
+                                    shape = RoundedCornerShape(16.dp),
                                     border = BorderStroke(1.dp, VioletPrimary.copy(alpha = 0.45f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(12.dp),
+                                        modifier = Modifier.padding(14.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Text(
@@ -202,7 +212,7 @@ fun CommentsAndReportsScreen(
                             if (replyingToCommentId == comment.id) {
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
                                     OutlinedTextField(
                                         value = replyDraft,
@@ -212,11 +222,12 @@ fun CommentsAndReportsScreen(
                                         minLines = 2,
                                         maxLines = 4,
                                         enabled = !isSubmitting,
+                                        shape = RoundedCornerShape(16.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
                                         OutlinedButton(
                                             onClick = {
@@ -227,7 +238,8 @@ fun CommentsAndReportsScreen(
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .heightIn(min = 48.dp),
-                                            border = BorderStroke(1.dp, GraphiteBorder)
+                                            border = BorderStroke(1.dp, GraphiteBorder),
+                                            shape = RoundedCornerShape(50)
                                         ) {
                                             Text("বাতিল", color = TextSecondary)
                                         }
@@ -245,10 +257,11 @@ fun CommentsAndReportsScreen(
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = VioletPrimary,
                                                 contentColor = TextPrimary
-                                            )
+                                            ),
+                                            shape = RoundedCornerShape(50)
                                         ) {
                                             if (isSubmitting) {
-                                                androidx.compose.material3.CircularProgressIndicator(
+                                                CircularProgressIndicator(
                                                     modifier = Modifier.size(18.dp),
                                                     color = TextPrimary,
                                                     strokeWidth = 2.dp
@@ -263,7 +276,7 @@ fun CommentsAndReportsScreen(
                                 }
                             }
 
-                            HorizontalDivider(color = GraphiteBorder)
+                            HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
@@ -275,7 +288,7 @@ fun CommentsAndReportsScreen(
                                     enabled = !isSubmitting,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     border = BorderStroke(1.dp, GraphiteBorder),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(50)
                                 ) {
                                     Icon(
                                         imageVector = if (comment.isVisible) {
@@ -302,7 +315,7 @@ fun CommentsAndReportsScreen(
                                     enabled = !isSubmitting,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     border = BorderStroke(1.dp, GraphiteBorder),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(50)
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Reply,
@@ -314,12 +327,33 @@ fun CommentsAndReportsScreen(
                                     Text(text = "উত্তর দিন", color = TextPrimary)
                                 }
 
+                                if (comment.userId.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            pendingBlockUser = comment.userId to comment.userName
+                                        },
+                                        enabled = !isSubmitting,
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
+                                        shape = RoundedCornerShape(50)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Block,
+                                            contentDescription = "ব্যবহারকারী ব্লক",
+                                            tint = StatusRose,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(text = "ব্লক করুন", color = StatusRose)
+                                    }
+                                }
+
                                 OutlinedButton(
                                     onClick = { pendingDeleteComment = comment },
                                     enabled = !isSubmitting,
                                     modifier = Modifier.heightIn(min = 48.dp),
                                     border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(50)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
@@ -355,19 +389,37 @@ fun CommentsAndReportsScreen(
                         else -> "OPEN"
                     }
 
+                    val reportedComment = remember(comments, report.commentId, report.targetId) {
+                        comments.firstOrNull { cmt ->
+                            (report.commentId.isNotBlank() && cmt.id == report.commentId) ||
+                                (report.targetId.isNotBlank() && cmt.id == report.targetId)
+                        }
+                    }
+
+                    val targetBlockUserId = remember(reportedComment, report) {
+                        when {
+                            reportedComment != null && reportedComment.userId.isNotBlank() -> reportedComment.userId
+                            report.targetType.equals("user", ignoreCase = true) && report.targetId.isNotBlank() -> report.targetId
+                            else -> ""
+                        }
+                    }
+                    val targetBlockUserName = remember(reportedComment) {
+                        reportedComment?.userName?.ifBlank { "ব্যবহারকারী" } ?: "ব্যবহারকারী"
+                    }
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("report_card_${report.id}"),
                         colors = CardDefaults.cardColors(containerColor = GraphiteCard),
-                        border = BorderStroke(1.dp, GraphiteBorder),
-                        shape = RoundedCornerShape(16.dp)
+                        border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                        shape = RoundedCornerShape(24.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -400,7 +452,230 @@ fun CommentsAndReportsScreen(
                                 )
                             }
 
-                            HorizontalDivider(color = GraphiteBorder)
+                            // Show the reported comment directly inside the report card
+                            if (reportedComment != null) {
+                                Surface(
+                                    color = ObsidianBg,
+                                    shape = RoundedCornerShape(18.dp),
+                                    border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.75f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "রিপোর্টকৃত কমেন্ট • ${reportedComment.userName.ifBlank { "ব্যবহারকারী" }}",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = VioletBright,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            StatusPill(
+                                                label = if (reportedComment.isVisible) "দৃশ্যমান" else "লুকানো",
+                                                tone = if (reportedComment.isVisible) "VISIBLE" else "HIDDEN"
+                                            )
+                                        }
+
+                                        Text(
+                                            text = reportedComment.text,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = TextPrimary
+                                        )
+
+                                        if (reportedComment.adminReply.isNotBlank()) {
+                                            Surface(
+                                                color = VioletContainer.copy(alpha = 0.55f),
+                                                shape = RoundedCornerShape(14.dp),
+                                                border = BorderStroke(1.dp, VioletPrimary.copy(alpha = 0.45f)),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(10.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "অ্যাডমিনের উত্তর:",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = VioletBright
+                                                    )
+                                                    Text(
+                                                        text = reportedComment.adminReply,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = TextPrimary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (replyingInReportId == report.id) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = reportReplyDraft,
+                                            onValueChange = { if (it.length <= 500) reportReplyDraft = it },
+                                            label = { Text("অ্যাডমিনের উত্তর লিখুন") },
+                                            supportingText = { Text("${reportReplyDraft.length} / 500") },
+                                            minLines = 2,
+                                            maxLines = 4,
+                                            enabled = !isSubmitting,
+                                            shape = RoundedCornerShape(16.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    replyingInReportId = null
+                                                    reportReplyDraft = ""
+                                                },
+                                                enabled = !isSubmitting,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .heightIn(min = 48.dp),
+                                                border = BorderStroke(1.dp, GraphiteBorder),
+                                                shape = RoundedCornerShape(50)
+                                            ) {
+                                                Text("বাতিল", color = TextSecondary)
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    onReplyToComment(reportedComment, reportReplyDraft) {
+                                                        replyingInReportId = null
+                                                        reportReplyDraft = ""
+                                                    }
+                                                },
+                                                enabled = !isSubmitting,
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .heightIn(min = 48.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = VioletPrimary,
+                                                    contentColor = TextPrimary
+                                                ),
+                                                shape = RoundedCornerShape(50)
+                                            ) {
+                                                Text("উত্তর সেভ করুন")
+                                            }
+                                        }
+                                    }
+                                }
+
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            replyingInReportId = report.id
+                                            reportReplyDraft = reportedComment.adminReply
+                                        },
+                                        enabled = !isSubmitting,
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        border = BorderStroke(1.dp, GraphiteBorder),
+                                        shape = RoundedCornerShape(50)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.Reply,
+                                            contentDescription = "উত্তর দিন",
+                                            tint = TextPrimary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(text = "উত্তর দিন", color = TextPrimary)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { pendingDeleteComment = reportedComment },
+                                        enabled = !isSubmitting,
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
+                                        shape = RoundedCornerShape(50)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "কমেন্ট মুছুন",
+                                            tint = StatusRose,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(text = "কমেন্ট মুছুন", color = StatusRose)
+                                    }
+
+                                    if (targetBlockUserId.isNotBlank()) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                pendingBlockUser = targetBlockUserId to targetBlockUserName
+                                            },
+                                            enabled = !isSubmitting,
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                            border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
+                                            shape = RoundedCornerShape(50)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Block,
+                                                contentDescription = "ব্যবহারকারী ব্লক",
+                                                tint = StatusRose,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(text = "ব্লক করুন", color = StatusRose)
+                                        }
+                                    }
+                                }
+                            } else if (
+                                report.commentId.isNotBlank() ||
+                                report.targetType.equals("comment", ignoreCase = true)
+                            ) {
+                                Surface(
+                                    color = ObsidianBg,
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = BorderStroke(1.dp, GraphiteBorder.copy(alpha = 0.65f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "কমেন্টটি পাওয়া যায়নি বা ইতিমধ্যে মুছে ফেলা হয়েছে।",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary,
+                                        modifier = Modifier.padding(14.dp)
+                                    )
+                                }
+                            } else if (targetBlockUserId.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = {
+                                        pendingBlockUser = targetBlockUserId to targetBlockUserName
+                                    },
+                                    enabled = !isSubmitting,
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                    border = BorderStroke(1.dp, StatusRose.copy(alpha = 0.6f)),
+                                    shape = RoundedCornerShape(50)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Block,
+                                        contentDescription = "ব্যবহারকারী ব্লক",
+                                        tint = StatusRose,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = "ব্লক করুন", color = StatusRose)
+                                }
+                            }
+
+                            HorizontalDivider(color = GraphiteBorder.copy(alpha = 0.6f))
 
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
@@ -412,6 +687,7 @@ fun CommentsAndReportsScreen(
                                     onClick = { onUpdateReportStatus(report, "open") },
                                     enabled = !isSubmitting,
                                     label = { Text("ওপেন") },
+                                    shape = RoundedCornerShape(50),
                                     modifier = Modifier.heightIn(min = 48.dp)
                                 )
                                 FilterChip(
@@ -419,6 +695,7 @@ fun CommentsAndReportsScreen(
                                     onClick = { onUpdateReportStatus(report, "reviewed") },
                                     enabled = !isSubmitting,
                                     label = { Text("পর্যালোচিত") },
+                                    shape = RoundedCornerShape(50),
                                     modifier = Modifier.heightIn(min = 48.dp)
                                 )
                                 FilterChip(
@@ -426,6 +703,7 @@ fun CommentsAndReportsScreen(
                                     onClick = { onUpdateReportStatus(report, "dismissed") },
                                     enabled = !isSubmitting,
                                     label = { Text("বাতিল") },
+                                    shape = RoundedCornerShape(50),
                                     modifier = Modifier.heightIn(min = 48.dp)
                                 )
                             }
@@ -443,6 +721,16 @@ fun CommentsAndReportsScreen(
             confirmButtonText = "মুছুন",
             onConfirm = { onDeleteComment(target) },
             onDismiss = { pendingDeleteComment = null }
+        )
+    }
+
+    pendingBlockUser?.let { (userId, userName) ->
+        DestructiveConfirmationDialog(
+            title = "ব্যবহারকারী ব্লক করবেন?",
+            message = "'${userName.ifBlank { userId }}' ব্যবহারকারীকে ব্লক করা হবে এবং তার কমেন্টগুলো লুকানো হবে।",
+            confirmButtonText = "ব্লক করুন",
+            onConfirm = { onBlockUser(userId, userName) },
+            onDismiss = { pendingBlockUser = null }
         )
     }
 }
